@@ -1,38 +1,42 @@
 #include "Model3D.h"
 
-Model3D::Model3D(glm::vec3 position)
+Model3D::Model3D(glm::vec3 position,
+    const char* vertexPath,
+    const char* fragmentPath)
 {
-    //initial transformation
 	this->position = position;
 	this->rotation = { 0,0,0 };
 	this->scale = { 0.1f,0.1f,0.1f };
-    this->rotX = 0;
-    this->rotY = 0;
-    this->rotZ = 0;
- 
-    
+    theta_x = 0.f;
+    theta_y = 0.f; 
+    theta_z = 0.f;
 
+    /* Initialize the identity matrix */
     this->identity_matrix4 = glm::mat4(1.0f);
 
-    /*      INITIAL CAMERA VARIABLES        */
-    projection = glm::perspective(
-        glm::radians(60.f),//FOV
-        800.f / 800.f, //aspect ratio
-        0.1f, //znear > 0
-        1000.f //zfar
-    );
-
-    this->cameraPos = glm::vec3(0, 0, 2.f);
-    this->WorldUp = glm::vec3(0, 1.0f, 0);
-    this->Front = glm::vec3(0, 0.0f, -1);
-
-    this->viewMatrix = glm::lookAt(this->cameraPos, this->cameraPos + this->Front, this->WorldUp);
+    this->shaderProg = new Shader(vertexPath, fragmentPath);
 }
 
-void Model3D::draw(GLuint* shaderProg, 
-    GLuint* VAO, 
-    std::vector<GLfloat>* fullVertexData
-)
+Model3D::Model3D(glm::vec3 position,
+    std::vector<GLfloat> fullVertexData,
+    const char* vertexPath, const char* fragmentPath,float rot)
+{
+    this->position = position;
+    this->rotation = { 0,0,0 };
+    this->scale = { 0.1f,0.1f,0.1f };
+    theta_x = 0.f;
+    theta_y = rot;
+    theta_z = 0.f;
+
+    /* Initialize the identity matrix */
+    this->identity_matrix4 = glm::mat4(1.0f);
+
+    this->fullVertexData = fullVertexData;
+
+    this->shaderProg = new Shader(vertexPath, fragmentPath);
+}
+
+void Model3D::draw()
 {
     //start with the translation matrix
     glm::mat4 transformation_matrix = glm::translate(
@@ -45,277 +49,207 @@ void Model3D::draw(GLuint* shaderProg,
         transformation_matrix,
         glm::vec3(scale.x, scale.y, scale.z)
     );
-    //rotate along x
+
     transformation_matrix = glm::rotate(
         transformation_matrix,
-        glm::radians(rotX),
+        glm::radians(theta_x),
         glm::normalize(glm::vec3(1, 0, 0))
     );
-    //rotate along y
+
     transformation_matrix = glm::rotate(
         transformation_matrix,
-        glm::radians(rotY),
+        glm::radians(theta_y),
         glm::normalize(glm::vec3(0, 1, 0))
     );
-    //rotate along z
+
     transformation_matrix = glm::rotate(
         transformation_matrix,
-        glm::radians(rotZ),
+        glm::radians(theta_z),
         glm::normalize(glm::vec3(0, 0, 1))
     );
 
     //setting the transformation
-    unsigned int transformLoc = glGetUniformLocation(*shaderProg, "transform");
-    glUniformMatrix4fv(
-        transformLoc, //address of the transform variable
-        1, //how many matrices to assign
-        GL_FALSE, //transpose?
-        glm::value_ptr(transformation_matrix) //pointer to the matrix
+    this->shaderProg->setMat4("transform", transformation_matrix);
+
+    //tell open GL to use this shader for the VAOs below
+    this->shaderProg->use();
+
+    //bind the VAO to prep for drawing
+    glBindVertexArray(this->VAO);
+
+    //drawing
+    glDrawArrays(GL_TRIANGLES, 0, this->fullVertexData.size() / 14);
+}
+
+void Model3D::draw(Shader* shaderProgB, GLuint* VAOB, std::vector<GLfloat>* fullVertexDataB)
+{
+    //start with the translation matrix
+    glm::mat4 transformation_matrix = glm::translate(
+        identity_matrix4,
+        glm::vec3(position.x, position.y, position.z)
     );
 
-    //tell open GL to use this shader for the VAOs below
-    glUseProgram(*shaderProg);
+    //multiply the resultin matrix with the scale
+    transformation_matrix = glm::scale(
+        transformation_matrix,
+        glm::vec3(scale.x, scale.y, scale.z)
+    );
 
-    /*      CAMERA      */
-    unsigned int projLoc = glGetUniformLocation(*shaderProg, "projection");
+    transformation_matrix = glm::rotate(
+        transformation_matrix,
+        glm::radians(theta_x),
+        glm::normalize(glm::vec3(1, 0, 0))
+    );
 
-    glUniformMatrix4fv(projLoc,
-        1,
-        GL_FALSE,
-        glm::value_ptr(projection));
+    transformation_matrix = glm::rotate(
+        transformation_matrix,
+        glm::radians(theta_y),
+        glm::normalize(glm::vec3(0, 1, 0))
+    );
 
-    unsigned int viewLoc = glGetUniformLocation(*shaderProg, "view");
-    glUniformMatrix4fv(viewLoc,
-        1,
-        GL_FALSE,
-        glm::value_ptr(viewMatrix));
-
-    GLuint cameraPosLoc = glGetUniformLocation(*shaderProg, "cameraPos");
-    glUniform3fv(cameraPosLoc,
-        1,
-        glm::value_ptr(cameraPos));
-
-    //bind the VAO to prep for drawing
-    glBindVertexArray(*VAO);
-
-    //drawing
-    glDrawArrays(GL_TRIANGLES, 0, fullVertexData->size() / 8);
-}
-
-void Model3D::mainDraw(Shader* shaderProg, GLuint* VAO, std::vector<GLfloat>* fullVertexData)
-{
-    
-    glm::mat4 transformation_matrix = this->mainTrans();
-    
-    //setting the transformation
-    shaderProg->setMat4("transform", transformation_matrix);
-
-    //projection
-    shaderProg->setMat4("projection", projection);
-
-    //view
-    shaderProg->setMat4("view", viewMatrix);
-
-    //camera pos
-    shaderProg->setVec3("cameraPos", cameraPos);
-
-
-    //tell open GL to use this shader for the VAOs below
-    shaderProg->use();
-
-    //bind the VAO to prep for drawing
-    glBindVertexArray(*VAO);
-
-    //drawing
-    glDrawArrays(GL_TRIANGLES, 0, fullVertexData->size() / 8);
-}
-
-void Model3D::sphereDraw(Shader* shaderProg, GLuint* VAO, std::vector<GLfloat>* fullVertexData)
-{
-
-
-    
-     glm::mat4 transformation_matrix = this->sphereTrans();
-   
-
-
-
-
+    transformation_matrix = glm::rotate(
+        transformation_matrix,
+        glm::radians(-90.f),
+        glm::normalize(glm::vec3(0, 0, 1))
+    );
 
     //setting the transformation
-    shaderProg->setMat4("transform", transformation_matrix);
-
-    //projection
-    shaderProg->setMat4("projection", projection);
-
-    //view
-    shaderProg->setMat4("view", viewMatrix);
-
-    //camera pos
-    shaderProg->setVec3("cameraPos", cameraPos);
-
+    shaderProgB->setMat4("transform", transformation_matrix);
 
     //tell open GL to use this shader for the VAOs below
-    shaderProg->use();
+    shaderProgB->use();
 
     //bind the VAO to prep for drawing
-    glBindVertexArray(*VAO);
+    glBindVertexArray(*VAOB);
 
     //drawing
-    glDrawArrays(GL_TRIANGLES, 0, fullVertexData->size() / 8);
+    glDrawArrays(GL_TRIANGLES, 0, fullVertexDataB->size() / 14);
 }
 
-void Model3D::rotate(char axis, int direction)
+void Model3D::rotate(char axis, char direction)
 {
+    switch (direction)
+    {
     
-    switch (direction) {
-
-
-    case 0:
-        switch (axis)
-        {
-        case 'x':
-            this->rotX += 1;
-            break;
-        case 'y':
-            this->rotY += 1;
-            break;
-        case 'z':
-            this->rotZ += 1;
-            break;
-        default:
-            break;
-        }
+    case '+':
+        this->theta_y += 7.5;
         break;
-
-
-    case 1:
-        switch (axis)
-        {
-        case 'x':
-            this->rotX -= 1;
-            break;
-        case 'y':
-            this->rotY -= 1;
-            break;
-        case 'z':
-            this->rotZ -= 1;
-            break;
-        default:
-            break;
-        }
-
-
+    case '-':
+        this->theta_y -= 7.5;
+        break;
+    
     default:
         break;
-    } 
-    
-    
+    }
 }
 
-glm::mat4 Model3D::sphereTrans() {
-
-    //rotate along x
-    glm::mat4 transformation_matrix = glm::rotate(
-        this->identity_matrix4,
-        glm::radians(rotX),
-        glm::normalize(glm::vec3(1, 0, 0))
-    );
-    //rotate along y
-    transformation_matrix = glm::rotate(
-        transformation_matrix,
-        glm::radians(rotY),
-        glm::normalize(glm::vec3(0, 1, 0))
-    );
-    //rotate along z
-    transformation_matrix = glm::rotate(
-        transformation_matrix,
-        glm::radians(rotZ),
-        glm::normalize(glm::vec3(0, 0, 1))
-    );
-
-    //translate
-     transformation_matrix = glm::translate(
-        transformation_matrix,
-        glm::vec3(position.x, position.y, position.z)
-    );
-
-    //SCALE if needed
-    transformation_matrix = glm::scale(
-        transformation_matrix,
-        glm::vec3(scale.x, scale.y, scale.z)
-    );
-
-
-    //------------ROTATE--------------//
-
-
-    
-    return transformation_matrix;
-
-}
-glm::mat4 Model3D::mainTrans() {
-    //Translate if neeeded
-    glm::mat4 transformation_matrix = glm::translate(
-        this->identity_matrix4,
-        glm::vec3(position.x, position.y, position.z)
-    );
-    
-    //SCALE if needed
-    transformation_matrix = glm::scale(
-        transformation_matrix,
-        glm::vec3(scale.x, scale.y, scale.z)
-    );
-
-
-    //------------ROTATE--------------//
-
-
-    //rotate along x
-    transformation_matrix = glm::rotate(
-        transformation_matrix,
-        glm::radians(rotX),
-        glm::normalize(glm::vec3(1, 0, 0))
-    );
-    //rotate along y
-    transformation_matrix = glm::rotate(
-        transformation_matrix,
-        glm::radians(rotY),
-        glm::normalize(glm::vec3(0, 1, 0))
-    );
-    //rotate along z
-    transformation_matrix = glm::rotate(
-        transformation_matrix,
-        glm::radians(rotZ),
-        glm::normalize(glm::vec3(0, 0, 1))
-    );
-    return transformation_matrix;
-}
-
-void Model3D::setCamera(glm::mat4 projection, glm::vec3 cameraPos, glm::vec3 Front,glm::mat4 viewMatrix)
+void Model3D::initVAO()
 {
-    this->projection = projection;
-    this->cameraPos = cameraPos;
-    this->Front = Front;
-    
-    this->viewMatrix = glm::lookAt(this->cameraPos, this->cameraPos + this->Front, this->WorldUp);
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        //
+        sizeof(GLfloat) * fullVertexData.size(),
+        fullVertexData.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)0
+
+    );
+    glEnableVertexAttribArray(0);
+
+    GLintptr litPtr = 3 * sizeof(float);
+    glVertexAttribPointer(
+        1,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)litPtr
+
+    );
+    glEnableVertexAttribArray(1);
+
+    GLintptr uvPtr = 6 * sizeof(float);
+    glVertexAttribPointer(
+        2,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)uvPtr
+    );
+    glEnableVertexAttribArray(2);
+
+    //tangent point
+    GLintptr tangentPtr = 8 * sizeof(float);
+    glVertexAttribPointer(
+        3, //3 == tangent
+        3, //T (XYZ)
+        GL_FLOAT,
+        GL_FALSE,
+        14 * sizeof(float),
+        (void*)tangentPtr
+    );
+    glEnableVertexAttribArray(3);
+
+    //bitangent 
+    GLintptr bitangentPtr = 11 * sizeof(float);
+    glVertexAttribPointer(
+        4, //4 == bitangent
+        3, //B(XYZ)
+        GL_FLOAT,
+        GL_FALSE,
+        14 * sizeof(float),
+        (void*)bitangentPtr
+    );
+    glEnableVertexAttribArray(4);
 }
 
-void Model3D::setTexture(Shader* shaderProg, GLuint* texture, const std::string& name)
+void Model3D::deleteVAO()
 {
-    GLuint texAddress = glGetUniformLocation(shaderProg->getID(), name.c_str());
-    glBindTexture(GL_TEXTURE_2D, *texture);
-    glUniform1i(texAddress, 0);
+    glDeleteVertexArrays(1, &VAO);
+    glDeleteBuffers(1, &VBO);
 }
 
-void Model3D::setPosition(glm::vec3 newPos)
+void Model3D::setFullVertexData(std::vector<GLfloat> fullVertexData)
 {
-    this->position = newPos;
+    this->fullVertexData = fullVertexData;
 }
 
-void Model3D::setScale(glm::vec3 newScale)
+void Model3D::setPosition(glm::vec3 pos)
 {
-    this->scale = newScale;
+    this->position = pos;
+}
+
+Shader* Model3D::getShader()
+{
+    return this->shaderProg;
+}
+
+unsigned int Model3D::getShaderID()
+{
+    return this->shaderProg->getID();
+}
+
+float Model3D::getYrot()
+{
+    return this->theta_y;
 }
 
 glm::vec3 Model3D::getPosition()
@@ -323,17 +257,4 @@ glm::vec3 Model3D::getPosition()
     return this->position;
 }
 
-glm::vec3 Model3D::getPosition(bool fromMatrix)
-{
-    if (!fromMatrix)
-        return glm::vec3( 0.f,0.f,0.f );
-
-    glm::mat4 transMatrix = this->mainTrans();
-
-    glm::vec4 buffer = glm::vec4(this->position,1.0f) * transMatrix;
-    glm::vec3 currentPos = { buffer.x * -10, buffer.y * 10, buffer.z * -10 };
-    //std::cout << "y: " << buffer.y<< std::endl;
-
-    return currentPos;
-}
 

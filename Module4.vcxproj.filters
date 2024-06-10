@@ -65,6 +65,12 @@
     <ClInclude Include="ColorLight.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="P6\MyVector.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="P6\Particle.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CopyFileToFolders Include="Shaders\sample.frag">

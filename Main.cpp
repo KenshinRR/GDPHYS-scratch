@@ -17,6 +17,10 @@
 #include <string>
 #include <cmath>
 #include <vector>
+#include <chrono>
+
+using namespace std::chrono_literals;
+constexpr std::chrono::nanoseconds timestep(16ms);
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -56,8 +60,8 @@ float height = 800.0f;
 float width = 800.0f;
 
 //Initializing the object classes to be rendered
-Model3D light_ball({ 0,1,0 });
-OrthoCamera orca({ 0,2,0 });
+//Model3D light_ball({ 0,1,0 });
+//OrthoCamera orca({ 0,2,0 });
 
 
 //Point light variables
@@ -66,10 +70,358 @@ float dl_brightness = 1.0f;
 
 glm::vec3 sphere_color = { 0.f,0.f,1.f };
 
+GLuint createTexture(const char* fileName) {
+    int img_width, img_height, colorChannels;
+
+    unsigned char* tex_bytes = stbi_load(
+        fileName,
+        &img_width,
+        &img_height,
+        &colorChannels,
+        0
+    );
+
+    GLuint texture;
+
+    glGenTextures(1, &texture);
+
+    glActiveTexture(GL_TEXTURE0);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexImage2D(GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        img_width,
+        img_height,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        tex_bytes);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(tex_bytes);
+
+    return texture;
+}
+
+GLuint createTextureJPG(const char* fileName) {
+    int img_width, img_height, colorChannels;
+
+    unsigned char* tex_bytes = stbi_load(
+        fileName,
+        &img_width,
+        &img_height,
+        &colorChannels,
+        0
+    );
+
+    GLuint texture;
+
+    glGenTextures(1, &texture);
+
+    glActiveTexture(GL_TEXTURE0);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexImage2D(GL_TEXTURE_2D,
+        0,
+        GL_RGB,
+        img_width,
+        img_height,
+        0,
+        GL_RGB,
+        GL_UNSIGNED_BYTE,
+        tex_bytes);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(tex_bytes);
+
+    return texture;
+}
+
+void useTexture(GLuint shaderProg, GLuint texture) {
+    glActiveTexture(GL_TEXTURE0);
+    GLuint mainObjtex0Address = glGetUniformLocation(shaderProg, "tex0");
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glUniform1i(mainObjtex0Address, 0);
+}
+
+void useNormTexture(GLuint shaderProg, GLuint texture) {
+    glActiveTexture(GL_TEXTURE1);
+    GLuint mainObjNORMtex0Address = glGetUniformLocation(shaderProg, "norm_tex");
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glUniform1i(mainObjNORMtex0Address, 1);
+}
+
+
+GLuint createNormTexture(const char* fileName) {
+    int img_width_map, img_height_map, colorChannels_map;
+
+    unsigned char* tex_bytes_norm = stbi_load(
+        fileName,
+        &img_width_map,
+        &img_height_map,
+        &colorChannels_map,
+        0
+    );
+
+    GLuint norm_tex;
+
+    glGenTextures(1, &norm_tex);
+
+    glActiveTexture(GL_TEXTURE1);
+
+    glBindTexture(GL_TEXTURE_2D, norm_tex);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+
+    glTexImage2D(GL_TEXTURE_2D,
+        0,
+        GL_RGB,
+        img_width_map,
+        img_height_map,
+        0,
+        GL_RGB,
+        GL_UNSIGNED_BYTE,
+        tex_bytes_norm);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    stbi_image_free(tex_bytes_norm);
+
+    return norm_tex;
+}
+
+std::vector<GLfloat> getFullVertexData(std::string fileName) {
+    std::string path = fileName;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> material;
+    std::string warning, error;
+
+    tinyobj::attrib_t attributes;
+
+    bool success = tinyobj::LoadObj(
+        &attributes,
+        &shapes,
+        &material,
+        &warning,
+        &error,
+        path.c_str()
+    );
+
+
+    //vector to hold our tangents
+    std::vector<glm::vec3> tangents;
+    std::vector<glm::vec3> bitangents;
+
+    //for loop that will go over all the verteces by 3
+    for (int i = 0; i < shapes[0].mesh.indices.size(); i += 3)
+    {
+        tinyobj::index_t vData1 = shapes[0].mesh.indices[i];
+        tinyobj::index_t vData2 = shapes[0].mesh.indices[i + 1];
+        tinyobj::index_t vData3 = shapes[0].mesh.indices[i + 2];
+
+        //position of vertex 1
+        glm::vec3 v1 = glm::vec3(
+            attributes.vertices[vData1.vertex_index * 3],
+            attributes.vertices[(vData1.vertex_index * 3) + 1],
+            attributes.vertices[(vData1.vertex_index * 3) + 2]
+        );
+
+        //position of vertex 2
+        glm::vec3 v2 = glm::vec3(
+            attributes.vertices[vData2.vertex_index * 3],
+            attributes.vertices[(vData2.vertex_index * 3) + 1],
+            attributes.vertices[(vData2.vertex_index * 3) + 2]
+        );
+
+        //position of vertex 3
+        glm::vec3 v3 = glm::vec3(
+            attributes.vertices[vData3.vertex_index * 3],
+            attributes.vertices[(vData3.vertex_index * 3) + 1],
+            attributes.vertices[(vData3.vertex_index * 3) + 2]
+        );
+
+        //UV of vertex 1
+        glm::vec2 uv1 = glm::vec2(
+            attributes.texcoords[(vData1.texcoord_index * 2)],
+            attributes.texcoords[(vData1.texcoord_index * 2) + 1]
+        );
+
+        //UV of vertex 2
+        glm::vec2 uv2 = glm::vec2(
+            attributes.texcoords[(vData2.texcoord_index * 2)],
+            attributes.texcoords[(vData2.texcoord_index * 2) + 1]
+        );
+
+        //UV of vertex 3
+        glm::vec2 uv3 = glm::vec2(
+            attributes.texcoords[(vData3.texcoord_index * 2)],
+            attributes.texcoords[(vData3.texcoord_index * 2) + 1]
+        );
+
+        //edges of the triangle : position delta
+        glm::vec3 deltaPos1 = v2 - v1;
+        glm::vec3 deltaPos2 = v3 - v1;
+
+        //UV delta
+        glm::vec2 deltaUV1 = uv2 - uv1;
+        glm::vec2 deltaUV2 = uv3 - uv1;
+
+        float r = 1.0f / ((deltaUV1.x * deltaUV2.y) - (deltaUV1.y * deltaUV2.x));
+
+        //tangent (T)
+        glm::vec3 tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * r;
+        //bitangent (B)
+        glm::vec3 bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * r;
+
+        //push the tangent and bitangent
+        //3x for the 3  vertices of the triangle
+        tangents.push_back(tangent);
+        tangents.push_back(tangent);
+        tangents.push_back(tangent);
+
+        bitangents.push_back(bitangent);
+        bitangents.push_back(bitangent);
+        bitangents.push_back(bitangent);
+    }
+
+    //get the  indices array OF mesh that will be placed into vbo
+    //std::vector<GLuint> mesh_indices;
+    std::vector<GLfloat> fullVertexData;
+    for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
+        tinyobj::index_t vData = shapes[0].mesh.indices[i];
+
+        //vertex
+        fullVertexData.push_back(
+            attributes.vertices[(vData.vertex_index * 3)]
+        );
+
+        fullVertexData.push_back(
+            attributes.vertices[(vData.vertex_index * 3) + 1]
+        );
+
+        fullVertexData.push_back(
+            attributes.vertices[(vData.vertex_index * 3) + 2]
+        );
+
+        //normal
+        fullVertexData.push_back(
+            attributes.normals[(vData.normal_index * 3)]
+        );
+
+        fullVertexData.push_back(
+            attributes.normals[(vData.normal_index * 3) + 1]
+        );
+
+        fullVertexData.push_back(
+            attributes.normals[(vData.normal_index * 3) + 2]
+        );
+
+        //texcoord
+        fullVertexData.push_back(
+            attributes.texcoords[(vData.texcoord_index * 2)]
+        );
+
+        fullVertexData.push_back(
+            attributes.texcoords[(vData.texcoord_index * 2) + 1]
+        );
+
+        //push the tangent and bitangent to the vertex data
+        fullVertexData.push_back(tangents[i].x);
+        fullVertexData.push_back(tangents[i].y);
+        fullVertexData.push_back(tangents[i].z);
+        fullVertexData.push_back(bitangents[i].x);
+        fullVertexData.push_back(bitangents[i].y);
+        fullVertexData.push_back(bitangents[i].z);
+    }
+
+    return fullVertexData;
+}
+
+std::vector<GLuint> createVAOandVBO(std::vector<GLfloat> fullVertexData) {
+    GLuint VAO, VBO;
+
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+
+    glBindVertexArray(VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        //
+        sizeof(GLfloat) * fullVertexData.size(),
+        fullVertexData.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+    glVertexAttribPointer(
+        0,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)0
+
+    );
+    glEnableVertexAttribArray(0);
+
+    GLintptr litPtr = 3 * sizeof(float);
+    glVertexAttribPointer(
+        1,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)litPtr
+
+    );
+    glEnableVertexAttribArray(1);
+
+    GLintptr uvPtr = 6 * sizeof(float);
+    glVertexAttribPointer(
+        2,
+        2,
+        GL_FLOAT,
+        GL_FALSE,
+
+        14 * sizeof(float),
+        (void*)uvPtr
+    );
+    glEnableVertexAttribArray(2);
+
+    //tangent point
+    GLintptr tangentPtr = 8 * sizeof(float);
+    glVertexAttribPointer(
+        3, //3 == tangent
+        3, //T (XYZ)
+        GL_FLOAT,
+        GL_FALSE,
+        14 * sizeof(float),
+        (void*)tangentPtr
+    );
+    glEnableVertexAttribArray(3);
+
+    //bitangent 
+    GLintptr bitangentPtr = 11 * sizeof(float);
+    glVertexAttribPointer(
+        4, //4 == bitangent
+        3, //B(XYZ)
+        GL_FLOAT,
+        GL_FALSE,
+        14 * sizeof(float),
+        (void*)bitangentPtr
+    );
+    glEnableVertexAttribArray(4);
+
+    return { VAO, VBO };
+}
+
 int main(void)
 {
+    //WINDOW SETUP
     GLFWwindow* window;
-
 
     /* Initialize the library */
     if (!glfwInit())
@@ -87,6 +439,11 @@ int main(void)
     glfwMakeContextCurrent(window);
     gladLoadGL();
 
+    //Time setup
+    using clock = std::chrono::high_resolution_clock;
+    auto curr_time = clock::now();
+    auto prev_time = curr_time;
+    std::chrono::nanoseconds curr_ns(0);
 
     /*      TEXTURE     */
     int img_width, img_height, colorChannels;
