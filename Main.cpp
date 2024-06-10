@@ -1,197 +1,95 @@
 #include <glad/glad.h>
-
 #include <GLFW/glfw3.h>
+
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/type_ptr.hpp> 
+#include <glm/gtc/quaternion.hpp> 
+#include <glm/gtx/quaternion.hpp>
 
-#include "Model3D.h"
-#include "Shader.h"
-#include "Light.h"
-#include "ColorLight.hpp"
-#include "Camera.h"
-#include "OrthoCamera.h"
 
 
 #include <iostream>
 #include <string>
-#include <cmath>
-#include <vector>
-#include <chrono>
-
-using namespace std::chrono_literals;
-constexpr std::chrono::nanoseconds timestep(16ms);
+#include <algorithm>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
 
+#include "chrono"
+using namespace std::chrono_literals;
+constexpr std::chrono::nanoseconds timestep(30ms);
 
-//general movement
-float x_scale = 2.0f, y_scale = 2.0f, z_scale = 2.0f;
+#include "P6/Vector.h"
+#include "P6/Particle.h"
+#include "P6/PhysicsWorld.h"
 
-float thetaX = 1.f, thetaY = 1.f;
+#include "Renderer/Shader.h"
 
-float x_axisX = 0.f, y_axisX = 1.f, z_axisX = 0.f;
+/*========GLOBAL VARIABLES=========*/
+//window dimensions
+float width = 700;
+float height = 700;
 
-float x_axisY = 1.f, y_axisY = 0.f, z_axisY = 0.f;
+float xRot = 0.0f, yRot = 0.0f, zRot = 0.0f;
 
-//for all time related additions
-float deltaTime = 0.0f;	
-float lastFrame = 0.0f; 
-float coolDown = 0.0f;
+//structs
+struct Racer{
+    std::string name;
+    int position;
+    P6::MyVector finalVelocity;
+    P6::MyVector averVelocity;
+    float finishedTime;
+}racer_red, racer_green, racer_blue, racer_yellow;
 
-//initialize camera vars
-glm::vec3 cameraPos = glm::vec3(0, 0, 2.f);
-glm::vec3 WorldUp = glm::vec3(0, 1.0f, 0);
-glm::vec3 Front = glm::vec3(0, 0.0f, -1);
-//initialize for mouse movement
-bool firstMouse = true;
-float pitch = 0.0f;
-float yaw = -90.0f;
-
-//for initial mouse movement
-float lastX = 400, lastY = 400;
-
-float height = 800.0f;
-float width = 800.0f;
-
-//Initializing the object classes to be rendered
-//Model3D light_ball({ 0,1,0 });
-//OrthoCamera orca({ 0,2,0 });
-
-
-//Point light variables
-float brightness = 3.0f;
-float dl_brightness = 1.0f;
-
-glm::vec3 sphere_color = { 0.f,0.f,1.f };
-
-GLuint createTexture(const char* fileName) {
-    int img_width, img_height, colorChannels;
-
-    unsigned char* tex_bytes = stbi_load(
-        fileName,
-        &img_width,
-        &img_height,
-        &colorChannels,
-        0
-    );
-
-    GLuint texture;
-
-    glGenTextures(1, &texture);
-
-    glActiveTexture(GL_TEXTURE0);
-
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexImage2D(GL_TEXTURE_2D,
-        0,
-        GL_RGBA,
-        img_width,
-        img_height,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        tex_bytes);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(tex_bytes);
-
-    return texture;
+void framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    glViewport(0, 0, width, height);
 }
 
-GLuint createTextureJPG(const char* fileName) {
-    int img_width, img_height, colorChannels;
+void processInput(GLFWwindow* window)
+{
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true);
+    
+    //yrot
+    if (glfwGetKey(window, GLFW_KEY_A)) {
+        yRot -= 0.05;
+    }
+    if (glfwGetKey(window, GLFW_KEY_D)) {
+        yRot += 0.05;
+    }
 
-    unsigned char* tex_bytes = stbi_load(
-        fileName,
-        &img_width,
-        &img_height,
-        &colorChannels,
-        0
-    );
+    //xRot
+    if (glfwGetKey(window, GLFW_KEY_S)) {
+        xRot -= 0.05;
+    }
+    if (glfwGetKey(window, GLFW_KEY_W)) {
+        xRot += 0.05;
+    }
 
-    GLuint texture;
+    //zRot
+    if (glfwGetKey(window, GLFW_KEY_Q)) {
+        zRot -= 0.05;
+    }
+    if (glfwGetKey(window, GLFW_KEY_E)) {
+        zRot += 0.05;
+    }
 
-    glGenTextures(1, &texture);
-
-    glActiveTexture(GL_TEXTURE0);
-
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexImage2D(GL_TEXTURE_2D,
-        0,
-        GL_RGB,
-        img_width,
-        img_height,
-        0,
-        GL_RGB,
-        GL_UNSIGNED_BYTE,
-        tex_bytes);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(tex_bytes);
-
-    return texture;
-}
-
-void useTexture(GLuint shaderProg, GLuint texture) {
-    glActiveTexture(GL_TEXTURE0);
-    GLuint mainObjtex0Address = glGetUniformLocation(shaderProg, "tex0");
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glUniform1i(mainObjtex0Address, 0);
-}
-
-void useNormTexture(GLuint shaderProg, GLuint texture) {
-    glActiveTexture(GL_TEXTURE1);
-    GLuint mainObjNORMtex0Address = glGetUniformLocation(shaderProg, "norm_tex");
-    glBindTexture(GL_TEXTURE_2D, texture);
-    glUniform1i(mainObjNORMtex0Address, 1);
+        
+    
+    
+        
 }
 
 
-GLuint createNormTexture(const char* fileName) {
-    int img_width_map, img_height_map, colorChannels_map;
+std::vector<GLfloat> getFullVertexData(std::string pathName) {
 
-    unsigned char* tex_bytes_norm = stbi_load(
-        fileName,
-        &img_width_map,
-        &img_height_map,
-        &colorChannels_map,
-        0
-    );
-
-    GLuint norm_tex;
-
-    glGenTextures(1, &norm_tex);
-
-    glActiveTexture(GL_TEXTURE1);
-
-    glBindTexture(GL_TEXTURE_2D, norm_tex);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-
-    glTexImage2D(GL_TEXTURE_2D,
-        0,
-        GL_RGB,
-        img_width_map,
-        img_height_map,
-        0,
-        GL_RGB,
-        GL_UNSIGNED_BYTE,
-        tex_bytes_norm);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(tex_bytes_norm);
-
-    return norm_tex;
-}
-
-std::vector<GLfloat> getFullVertexData(std::string fileName) {
-    std::string path = fileName;
+    std::string path = pathName;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> material;
     std::string warning, error;
@@ -207,90 +105,11 @@ std::vector<GLfloat> getFullVertexData(std::string fileName) {
         path.c_str()
     );
 
-
-    //vector to hold our tangents
-    std::vector<glm::vec3> tangents;
-    std::vector<glm::vec3> bitangents;
-
-    //for loop that will go over all the verteces by 3
-    for (int i = 0; i < shapes[0].mesh.indices.size(); i += 3)
-    {
-        tinyobj::index_t vData1 = shapes[0].mesh.indices[i];
-        tinyobj::index_t vData2 = shapes[0].mesh.indices[i + 1];
-        tinyobj::index_t vData3 = shapes[0].mesh.indices[i + 2];
-
-        //position of vertex 1
-        glm::vec3 v1 = glm::vec3(
-            attributes.vertices[vData1.vertex_index * 3],
-            attributes.vertices[(vData1.vertex_index * 3) + 1],
-            attributes.vertices[(vData1.vertex_index * 3) + 2]
-        );
-
-        //position of vertex 2
-        glm::vec3 v2 = glm::vec3(
-            attributes.vertices[vData2.vertex_index * 3],
-            attributes.vertices[(vData2.vertex_index * 3) + 1],
-            attributes.vertices[(vData2.vertex_index * 3) + 2]
-        );
-
-        //position of vertex 3
-        glm::vec3 v3 = glm::vec3(
-            attributes.vertices[vData3.vertex_index * 3],
-            attributes.vertices[(vData3.vertex_index * 3) + 1],
-            attributes.vertices[(vData3.vertex_index * 3) + 2]
-        );
-
-        //UV of vertex 1
-        glm::vec2 uv1 = glm::vec2(
-            attributes.texcoords[(vData1.texcoord_index * 2)],
-            attributes.texcoords[(vData1.texcoord_index * 2) + 1]
-        );
-
-        //UV of vertex 2
-        glm::vec2 uv2 = glm::vec2(
-            attributes.texcoords[(vData2.texcoord_index * 2)],
-            attributes.texcoords[(vData2.texcoord_index * 2) + 1]
-        );
-
-        //UV of vertex 3
-        glm::vec2 uv3 = glm::vec2(
-            attributes.texcoords[(vData3.texcoord_index * 2)],
-            attributes.texcoords[(vData3.texcoord_index * 2) + 1]
-        );
-
-        //edges of the triangle : position delta
-        glm::vec3 deltaPos1 = v2 - v1;
-        glm::vec3 deltaPos2 = v3 - v1;
-
-        //UV delta
-        glm::vec2 deltaUV1 = uv2 - uv1;
-        glm::vec2 deltaUV2 = uv3 - uv1;
-
-        float r = 1.0f / ((deltaUV1.x * deltaUV2.y) - (deltaUV1.y * deltaUV2.x));
-
-        //tangent (T)
-        glm::vec3 tangent = (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y) * r;
-        //bitangent (B)
-        glm::vec3 bitangent = (deltaPos2 * deltaUV1.x - deltaPos1 * deltaUV2.x) * r;
-
-        //push the tangent and bitangent
-        //3x for the 3  vertices of the triangle
-        tangents.push_back(tangent);
-        tangents.push_back(tangent);
-        tangents.push_back(tangent);
-
-        bitangents.push_back(bitangent);
-        bitangents.push_back(bitangent);
-        bitangents.push_back(bitangent);
-    }
-
-    //get the  indices array OF mesh that will be placed into vbo
-    //std::vector<GLuint> mesh_indices;
     std::vector<GLfloat> fullVertexData;
     for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
         tinyobj::index_t vData = shapes[0].mesh.indices[i];
 
-        //vertex
+
         fullVertexData.push_back(
             attributes.vertices[(vData.vertex_index * 3)]
         );
@@ -303,7 +122,6 @@ std::vector<GLfloat> getFullVertexData(std::string fileName) {
             attributes.vertices[(vData.vertex_index * 3) + 2]
         );
 
-        //normal
         fullVertexData.push_back(
             attributes.normals[(vData.normal_index * 3)]
         );
@@ -316,7 +134,6 @@ std::vector<GLfloat> getFullVertexData(std::string fileName) {
             attributes.normals[(vData.normal_index * 3) + 2]
         );
 
-        //texcoord
         fullVertexData.push_back(
             attributes.texcoords[(vData.texcoord_index * 2)]
         );
@@ -325,102 +142,79 @@ std::vector<GLfloat> getFullVertexData(std::string fileName) {
             attributes.texcoords[(vData.texcoord_index * 2) + 1]
         );
 
-        //push the tangent and bitangent to the vertex data
-        fullVertexData.push_back(tangents[i].x);
-        fullVertexData.push_back(tangents[i].y);
-        fullVertexData.push_back(tangents[i].z);
-        fullVertexData.push_back(bitangents[i].x);
-        fullVertexData.push_back(bitangents[i].y);
-        fullVertexData.push_back(bitangents[i].z);
     }
 
     return fullVertexData;
 }
 
-std::vector<GLuint> createVAOandVBO(std::vector<GLfloat> fullVertexData) {
-    GLuint VAO, VBO;
+glm::mat4 getTransMat(glm::vec3 position) {
 
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
+    glm::mat4 iden_Mat = glm::mat4(1.0f);
 
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glm::mat4 trans_Mat = glm::translate(iden_Mat, position);
 
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        //
-        sizeof(GLfloat) * fullVertexData.size(),
-        fullVertexData.data(),
-        GL_DYNAMIC_DRAW
+    //X-rotation
+    trans_Mat = glm::rotate(
+        trans_Mat,
+        glm::radians(xRot),
+        glm::normalize(glm::vec3(1.0f, 0.0f, 0.0f))
+
+    );//give quat
+
+    //Y-rotation
+    trans_Mat = glm::rotate(
+        trans_Mat,
+        glm::radians(yRot),
+        glm::normalize(glm::vec3(0.0f, 1.0f, 0.0f))
     );
 
-    glVertexAttribPointer(
-        0,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        14 * sizeof(float),
-        (void*)0
-
+    //Z-rotation
+    trans_Mat = glm::rotate(
+        trans_Mat,
+        glm::radians(zRot),
+        glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f))
     );
-    glEnableVertexAttribArray(0);
 
-    GLintptr litPtr = 3 * sizeof(float);
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        14 * sizeof(float),
-        (void*)litPtr
-
-    );
-    glEnableVertexAttribArray(1);
-
-    GLintptr uvPtr = 6 * sizeof(float);
-    glVertexAttribPointer(
-        2,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-
-        14 * sizeof(float),
-        (void*)uvPtr
-    );
-    glEnableVertexAttribArray(2);
-
-    //tangent point
-    GLintptr tangentPtr = 8 * sizeof(float);
-    glVertexAttribPointer(
-        3, //3 == tangent
-        3, //T (XYZ)
-        GL_FLOAT,
-        GL_FALSE,
-        14 * sizeof(float),
-        (void*)tangentPtr
-    );
-    glEnableVertexAttribArray(3);
-
-    //bitangent 
-    GLintptr bitangentPtr = 11 * sizeof(float);
-    glVertexAttribPointer(
-        4, //4 == bitangent
-        3, //B(XYZ)
-        GL_FLOAT,
-        GL_FALSE,
-        14 * sizeof(float),
-        (void*)bitangentPtr
-    );
-    glEnableVertexAttribArray(4);
-
-    return { VAO, VBO };
+    return trans_Mat;
 }
+
+float roundOff(float var)
+{
+    float value = (int)(var * 100 + .5);
+    return (float)value / 100;
+}
+
+void printRaceResults(std::vector<Racer> racers) {
+    for (int i = 0; i < (int)racers.size(); i++)
+    {
+        racers[i].position = i + 1;
+        std::cout << "Ranking: " << racers[i].position << std::endl;
+        std::cout << "Name: " << racers[i].name << std::endl;
+        std::cout << "Mag. Velocity: " << roundOff(racers[i].finalVelocity.Magnitude()) << " m/s" << std::endl;
+
+        std::cout << "Average Velocity: (" << roundOff(racers[i].averVelocity.x) << ", ";
+        std::cout << roundOff(racers[i].averVelocity.y) << ", " << roundOff(racers[i].averVelocity.z);
+        std::cout << ")m/s" << std::endl;
+
+        std::cout << roundOff(racers[i].finishedTime / 1000) << " seconds" << std::endl << std::endl;
+    }
+}
+
+bool compareByFloat(const Racer& a, const Racer& b) {
+    return a.finishedTime < b.finishedTime; // Sort in descending order
+}
+
+std::vector<Racer> getRacerRankings(const std::vector<Racer> racers) {
+    std::vector<Racer> sortedVector = racers;
+    std::sort(sortedVector.begin(), sortedVector.end(), compareByFloat);
+    return sortedVector;
+}
+
+
 
 int main(void)
 {
-    //WINDOW SETUP
+    
     GLFWwindow* window;
 
     /* Initialize the library */
@@ -428,658 +222,267 @@ int main(void)
         return -1;
 
     /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(width, height, "Reblando, Kenshin", NULL, NULL);
+    window = glfwCreateWindow(width, height , "PC01 Reblando", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
         return -1;
     }
 
-    /* Make the window's context current */
+;    /* Make the window's context current */
     glfwMakeContextCurrent(window);
     gladLoadGL();
 
-    //Time setup
+    
+
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    
+    //=================models================//
+
+    std::vector<GLfloat> fullVertexData = getFullVertexData("3D/sphere.obj");
+
+    //=================VBO/VAO==========//
+
+    unsigned int VBO, VAO;
+    
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+   
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * fullVertexData.size(), fullVertexData.data(), GL_DYNAMIC_DRAW);
+
+   
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    GLintptr normalptr = (3 * sizeof(float));
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)normalptr);
+    glEnableVertexAttribArray(1);
+
+    GLintptr UVptr = 6 * sizeof(float);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)UVptr);
+    glEnableVertexAttribArray(2);
+
+
+    
+    //Camera inits
+    //float screen_scale = 40.0f;
+    //glm::mat4 projection = glm::ortho(-screen_scale, screen_scale, -screen_scale, screen_scale, -screen_scale, screen_scale);
+    glm::mat4 projection = glm::ortho(-width/2, width/2, -height/2, height/2, -350.f, 350.f);
+    
+
+    //Initialize particles
+
+    std::vector<P6::P6Particle*> particles;
+    for (int i = 0; i < 4; i++)
+    {
+        particles.push_back(
+            new P6::P6Particle);
+    }
+
+    //Red particle
+    particles[0]->Position = {width/-2, height/2, 201.0f};
+    P6::MyVector direction = P6::MyVector(particles[0]->Position.Direction());
+    particles[0]->Velocity = P6::MyVector(direction.ScalarMult(-80.0f));
+    P6::MyVector redInitVel = particles[0]->Velocity;
+    particles[0]->Acceleration = P6::MyVector(direction.ScalarMult(-14.5f));
+
+    //Green particle
+    particles[1]->Position = { width / 2, height / 2, 173.0f };
+    direction = P6::MyVector(particles[1]->Position.Direction());
+    particles[1]->Velocity = P6::MyVector(direction.ScalarMult(-90.0f));
+    P6::MyVector greenInitVel = particles[1]->Velocity;
+    particles[1]->Acceleration = P6::MyVector(direction.ScalarMult(-8.0f));
+
+    //blue particle
+    particles[2]->Position = { width / 2, height / -2, -300.0f };
+    direction = P6::MyVector(particles[2]->Position.Direction());
+    particles[2]->Velocity = P6::MyVector(direction.ScalarMult(-130.0f));
+    P6::MyVector blueInitVel = particles[2]->Velocity;
+    particles[2]->Acceleration = P6::MyVector(direction.ScalarMult(-1.0f));
+
+    //yellow particle
+    particles[3]->Position = { width / -2, height / -2, -150.0f };
+    direction = P6::MyVector(particles[3]->Position.Direction());
+    particles[3]->Velocity = P6::MyVector(direction.ScalarMult(-110.0f));
+    P6::MyVector yellowInitVel = particles[3]->Velocity;
+    particles[3]->Acceleration = P6::MyVector(direction.ScalarMult(-3.0f));
+
+    std::vector<glm::vec3> rgb_values;
+    rgb_values.push_back(glm::vec3(1.0f, 0.0f, 0.0f)); //red
+    rgb_values.push_back(glm::vec3(0.0f, 1.0f, 0.0f)); //green
+    rgb_values.push_back(glm::vec3(0.0f, 0.0f, 1.0f)); //blue
+    rgb_values.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); //yellow
+    
+    //physics world
+    P6::PhysicsWorld physicsWorld;
+    for (P6::P6Particle* particle : particles)
+    {
+        physicsWorld.AddParticle(particle);
+    }
+
+    //Getting Shader
+    std::vector<Renderer::Shader> particleShaders;
+    for (int i = 0; i < particles.size(); i++)
+    {
+        Renderer::Shader particleShader("Shaders/vertShader.vert", "Shaders/fragShader.frag");
+        particleShaders.push_back(particleShader);
+    }
+
+    //clock initialiaze
     using clock = std::chrono::high_resolution_clock;
     auto curr_time = clock::now();
     auto prev_time = curr_time;
     std::chrono::nanoseconds curr_ns(0);
-
-    /*      TEXTURE     */
-    int img_width, img_height, colorChannels;
-
-    stbi_set_flip_vertically_on_load(true);
-
-    unsigned char* tex_bytes = stbi_load(
-        "3D/ayaya.png",
-        &img_width,
-        &img_height,
-        &colorChannels,
-        0
-    );
-
-    GLuint texture;
-
-    glGenTextures(1, &texture);
-
-    glActiveTexture(GL_TEXTURE0);
-
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glTexImage2D(GL_TEXTURE_2D,
-        0,
-        GL_RGBA,
-        img_width,
-        img_height,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        tex_bytes);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    stbi_image_free(tex_bytes);
-
-    //faces of the skybox
-    //std::string facesSkybox[]{
-    //    "Skybox/rainbow_rt.png", //RIGHT
-    //    "Skybox/rainbow_lf.png", //left
-    //    "Skybox/rainbow_up.png", //up
-    //    "Skybox/rainbow_dn.png", //down
-    //    "Skybox/rainbow_ft.png", //front
-    //    "Skybox/rainbow_bk.png", //back
-    //};
-
-    //faces of the skybox
-    std::string facesSkybox[]{
-        "Skybox/image3x2.png", //RIGHT
-        "Skybox/image1x2.png", //left
-        "Skybox/image2x1.png", //up
-        "Skybox/image2x3.png", //down
-        "Skybox/image2x2.png", //front
-        "Skybox/image4x2.png", //back
-    };
-
-    unsigned int skyboxTex;
-    glGenTextures(1, &skyboxTex);
-
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
-
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    for (unsigned int i = 0; i < 6; i++)
-    {
-        int w, h, skyCChannel;
-
-        stbi_set_flip_vertically_on_load(false);
-
-        unsigned char* data = stbi_load(facesSkybox[i].c_str(), &w, &h, &skyCChannel, 0);
-
-        if (data) {
-            glTexImage2D(
-                GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
-                0,
-                GL_RGBA,
-                w,
-                h,
-                0,
-                GL_RGBA,
-                GL_UNSIGNED_BYTE,
-                data
-            );
-
-            stbi_image_free(data);
-        }
-    }
-
-    stbi_set_flip_vertically_on_load(true);
-
-    glEnable(GL_DEPTH_TEST);
-
-    glViewport(0, 0, 800, 800);
-
-
-    //      SHADERS
-    Shader mainObjShader("Shaders/mainObj.vert", "Shaders/mainObj.frag");
-    Shader sphereShader("Shaders/sphere.vert", "Shaders/sphere.frag");
-
-    //compile shader vertex
-    std::fstream vertSrc("Shaders/directionLight.vert");
-    std::stringstream vertBuff;
-
-    vertBuff << vertSrc.rdbuf();
-
-    std::string vertS = vertBuff.str();
-    const char* v = vertS.c_str();
-
-    //compile shader fragment
-    std::fstream fragSrc("Shaders/directionLight.frag");
-    std::stringstream fragBuff;
-
-    fragBuff << fragSrc.rdbuf();
-
-    std::string fragS = fragBuff.str();
-    const char* f = fragS.c_str();
-
-    //SPHERE OBJECT SHADER ///////////////////////////////////////////////////////////////////////////
-    //compile shader vertex
-    std::fstream vertSrcSphere("Shaders/pointLight.vert");
-    std::stringstream vertBuffSphere;
-
-    vertBuffSphere << vertSrcSphere.rdbuf();
-
-    std::string vertSSphere = vertBuffSphere.str();
-    const char* vSphere = vertSSphere.c_str();
-
-    //compile shader fragment
-    std::fstream fragSrcSphere("Shaders/pointLight.frag");
-    std::stringstream fragBuffSphere;
-
-    fragBuffSphere << fragSrcSphere.rdbuf();
-
-    std::string fragSSphere = fragBuffSphere.str();
-    const char* fSphere = fragSSphere.c_str();
-
-    //SKYBOX ////////////////////////////////////////////////////////////////////////////
-    //compile skybox vertex
-    std::fstream vertSkyboxSrc("Shaders/skybox.vert");
-    std::stringstream vertSkyboxBuff;
-
-    vertSkyboxBuff << vertSkyboxSrc.rdbuf();
-
-    std::string vertSB = vertSkyboxBuff.str();
-    const char* vsb = vertSB.c_str();
-
-    //compile skybox fragment
-    std::fstream fragSkyboxSrc("Shaders/skybox.frag");
-    std::stringstream fragSkyboxBuff;
-
-    fragSkyboxBuff << fragSkyboxSrc.rdbuf();
-
-    std::string fragSB = fragSkyboxBuff.str();
-    const char* fsb = fragSB.c_str();
-
-    //MAIN OBJECT //////////////////////////////////////////////////////////////////////
-    //create vertex shader(used for movements)
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-
-    glShaderSource(vertexShader, 1, &v, NULL);
-
-    glCompileShader(vertexShader);
-
-    //create frag shader (our objects are turned into pixels/fragments which we will use to color in an object)
-    GLuint fragShader = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(fragShader, 1, &f, NULL);
-
-    glCompileShader(fragShader);
-
-    //create shader program that'll just run both frag and vert together as one.
-    GLuint shaderProg = glCreateProgram();
-    glAttachShader(shaderProg, vertexShader);
-    glAttachShader(shaderProg, fragShader);
-
-    glLinkProgram(shaderProg);//compile to make sure computer remembers
-
-    //SPHERE OBJECT //////////////////////////////////////////////////////////////////////
-    //create vertex shader(used for movements)
-    GLuint vertexShaderSphere = glCreateShader(GL_VERTEX_SHADER);
-
-    glShaderSource(vertexShaderSphere, 1, &vSphere, NULL);
-
-    glCompileShader(vertexShaderSphere);
-
-    //create frag shader (our objects are turned into pixels/fragments which we will use to color in an object)
-    GLuint fragShaderSphere = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(fragShaderSphere, 1, &fSphere, NULL);
-
-    glCompileShader(fragShaderSphere);
-
-    //create shader program that'll just run both frag and vert together as one.
-    GLuint shaderProgSphere = glCreateProgram();
-    glAttachShader(shaderProgSphere, vertexShaderSphere);
-    glAttachShader(shaderProgSphere, fragShaderSphere);
-
-    glLinkProgram(shaderProgSphere);//compile to make sure computer remembers
-
-    //SKYBOX //////////////////////////////////////////////////////////////////////////
-    //create vertex shader
-    GLuint vertexSkyboxShader = glCreateShader(GL_VERTEX_SHADER);
-
-    glShaderSource(vertexSkyboxShader, 1, &vsb, NULL);
-
-    glCompileShader(vertexSkyboxShader);
-
-    //create frag shader (our objects are turned into pixels/fragments which we will use to color in an object)
-    GLuint fragSkyboxShader = glCreateShader(GL_FRAGMENT_SHADER);
-
-    glShaderSource(fragSkyboxShader, 1, &fsb, NULL);
-
-    glCompileShader(fragSkyboxShader);
-
-    //create shader program that'll just run both frag and vert together as one.
-    GLuint skyboxShaderProg = glCreateProgram();
-    glAttachShader(skyboxShaderProg, vertexSkyboxShader);
-    glAttachShader(skyboxShaderProg, fragSkyboxShader);
-
-    glLinkProgram(skyboxShaderProg);//compile to make sure computer remembers
-
-    /////////////////////////////////////////////////////////////////////////////////////
-
-    //credits to original artist Kenshin Reblando for art.
-    std::string path = "3D/Cross.obj";
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> material;
-    std::string warning, error;
-
-    tinyobj::attrib_t attributes;
-
-    bool success = tinyobj::LoadObj(
-        &attributes,
-        &shapes,
-        &material,
-        &warning,
-        &error,
-        path.c_str()
-    );  
-
-    GLfloat UV[]{
-        0.f, 1.f,
-        0.f, 0.f,
-        1.f, 1.f,
-        1.f, 0.f,
-        1.f, 1.f,
-        1.f, 0.f,
-        0.f, 1.f,
-        0.f, 0.f
-    };
+    std::chrono::nanoseconds ns_tracker(0);
+    int buffer;
    
-    //array of Mesh for the main object
-    std::vector<GLfloat> fullVertexData;
-    for (int i = 0; i < shapes[0].mesh.indices.size(); i++) {
-        tinyobj::index_t vData = shapes[0].mesh.indices[i];
-
-        //vertex
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3)]
-        );
-
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3) + 1]
-        );
-
-        fullVertexData.push_back(
-            attributes.vertices[(vData.vertex_index * 3) + 2]
-        );
-
-        //normal
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3)]
-        );
-
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3) + 1]
-        );
-
-        fullVertexData.push_back(
-            attributes.normals[(vData.normal_index * 3) + 2]
-        );
-
-        //texcoord
-        fullVertexData.push_back(
-            attributes.texcoords[(vData.texcoord_index * 2)]
-        );
-
-        fullVertexData.push_back(
-            attributes.texcoords[(vData.texcoord_index * 2) + 1]
-        );
-
-    }
-
-    //credits to original artist Kenshin Reblando for art.
-    std::string sphere_path = "3D/sphere.obj";
-    std::vector<tinyobj::shape_t> sphere_shapes;
-    std::vector<tinyobj::material_t> sphere_material;
-
-    tinyobj::attrib_t sphere_attributes;
-
-    bool sphere_success = tinyobj::LoadObj(
-        &sphere_attributes,
-        &sphere_shapes,
-        &sphere_material,
-        &warning,
-        &error,
-        sphere_path.c_str()
-    );
-
-    //array of mesh for the light ball
-    std::vector<GLfloat> ball_fullVertexData;
-    for (int i = 0; i < sphere_shapes[0].mesh.indices.size(); i++) {
-        tinyobj::index_t vData = sphere_shapes[0].mesh.indices[i];
-
-        //vertex
-        ball_fullVertexData.push_back(
-            sphere_attributes.vertices[(vData.vertex_index * 3)]
-        );
-
-        ball_fullVertexData.push_back(
-            sphere_attributes.vertices[(vData.vertex_index * 3) + 1]
-        );
-
-        ball_fullVertexData.push_back(
-            sphere_attributes.vertices[(vData.vertex_index * 3) + 2]
-        );
-
-        //normal
-        ball_fullVertexData.push_back(
-            sphere_attributes.normals[(vData.normal_index * 3)]
-        );
-
-        ball_fullVertexData.push_back(
-            sphere_attributes.normals[(vData.normal_index * 3) + 1]
-        );
-
-        ball_fullVertexData.push_back(
-            sphere_attributes.normals[(vData.normal_index * 3) + 2]
-        );
-
-        //texcoord
-        ball_fullVertexData.push_back(
-            sphere_attributes.texcoords[(vData.texcoord_index * 2)]
-        );
-
-        ball_fullVertexData.push_back(
-            sphere_attributes.texcoords[(vData.texcoord_index * 2) + 1]
-        );
-
-    }
-    
-    //SKYBOX
-    //Vertices for the cube
-    float skyboxVertices[]{
-        -1.f, -1.f, 1.f, //0
-        1.f, -1.f, 1.f,  //1
-        1.f, -1.f, -1.f, //2
-        -1.f, -1.f, -1.f,//3
-        -1.f, 1.f, 1.f,  //4
-        1.f, 1.f, 1.f,   //5
-        1.f, 1.f, -1.f,  //6
-        -1.f, 1.f, -1.f  //7
-    };
-
-    //Skybox Indices
-    unsigned int skyboxIndices[]{
-        1,2,6,
-        6,5,1,
-
-        0,4,7,
-        7,3,0,
-
-        4,5,6,
-        6,7,4,
-
-        0,3,2,
-        2,1,0,
-
-        0,1,5,
-        5,4,0,
-
-        3,7,6,
-        6,2,3
-    };
-
-    //main object
-    GLuint VAO, VBO;// EBO;// VBO_UV;
-
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        sizeof(GLfloat) * fullVertexData.size(),
-        fullVertexData.data(),
-        GL_DYNAMIC_DRAW
-    );
-
-    
-    glVertexAttribPointer(
-        0,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)0
-
-    );
-
-    glEnableVertexAttribArray(0);
-
-    GLintptr litPtr = 3 * sizeof(float);
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)litPtr
-
-    );
-
-    glEnableVertexAttribArray(1);
-
-    GLintptr uvPtr = 6 * sizeof(float);
-    glVertexAttribPointer(
-        2,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)uvPtr
-
-    );
-
-    glEnableVertexAttribArray(2);
-
-    //sphere object
-    GLuint sphere_VAO, sphere_VBO;
-
-    glGenVertexArrays(1, &sphere_VAO);
-    glGenBuffers(1, &sphere_VBO);
-
-    glBindVertexArray(sphere_VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, sphere_VBO);
-
-    glBufferData(
-        GL_ARRAY_BUFFER,
-        sizeof(GLfloat)* ball_fullVertexData.size(),
-        ball_fullVertexData.data(),
-        GL_DYNAMIC_DRAW
-    );
-
-
-    glVertexAttribPointer(
-        0,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)0
-
-    );
-
-    glEnableVertexAttribArray(0);
-
-    GLintptr sphere_litPtr = 3 * sizeof(float);
-    glVertexAttribPointer(
-        1,
-        3,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)sphere_litPtr
-
-    );
-
-    glEnableVertexAttribArray(1);
-
-    GLintptr sphere_uvPtr = 6 * sizeof(float);
-    glVertexAttribPointer(
-        2,
-        2,
-        GL_FLOAT,
-        GL_FALSE,
-
-        8 * sizeof(float),
-        (void*)sphere_uvPtr
-
-    );
-
-    glEnableVertexAttribArray(2);
-
-    //skybox
-    unsigned int skyboxVAO, skyboxVBO, skyboxEBO;
-
-    glGenVertexArrays(1, &skyboxVAO);
-    glGenBuffers(1, &skyboxVBO);
-    glGenBuffers(1, &skyboxEBO);
-
-    glBindVertexArray(skyboxVAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, skyboxEBO);
-
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GL_INT) * 36, &skyboxIndices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-
-    //SET BINDINGS TO NULL
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-    glm::mat4 identity_matrix = glm::mat4(1.0f);
-
-    /*glm::mat4 projection = glm::ortho(
-        -2.f, //left
-        2.f, //right
-        - 2.f, //bot
-        2.f, //top
-        -1.f, //z near
-        1.f);  //z far*/
-
-    /*      CAMERA VARIABLES*/
-    glm::mat4 projection = glm::perspective(
-        glm::radians(60.f),//FOV
-        height / width, //aspect ratio
-        0.1f, //znear > 0
-        1000.f //zfar
-    );
-
-    /*      LIGHT VARIABLES     */
-    glm::vec3 lightPos = glm::vec3(-10, 10, 0);
-
-    glm::vec3 lightColor = glm::vec3(1,1,1);
-
-    float ambientStr = 0.2f;
-
-    glm::vec3 ambientColor = lightColor;
-
-    float specStr = 0.5f;
-
-    float specPhong = 8;
-
-    /*      Light Classes       */
-    glm::vec3 lightDirection = { 4,-5,0 };
-    ColorLight colorLight;
+    /*==============RACING VALUES=============*/
+    bool isRedFinished = false;
+    bool isBlueFinished = false;
+    bool isGreenFinished = false;
+    bool isYellowFinished = false;
+
+    std::vector<Racer> vecRacers;
+    vecRacers.push_back(racer_red);
+    vecRacers.push_back(racer_green);
+    vecRacers.push_back(racer_blue);
+    vecRacers.push_back(racer_yellow);
+
+    vecRacers[0].name = "Red";
+    vecRacers[1].name = "Green";
+    vecRacers[2].name = "Blue";
+    vecRacers[3].name = "Yellow";
+
+    //adding force
+    particles[0]->AddForce(P6::MyVector(1000.0f, -1000.0f, 0.0f));
 
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
     {
+        curr_time = clock::now();
 
-        //set time so that movement is uniform for all devices if needed
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        coolDown -= 1 * deltaTime;
-        
+        auto dur = std::chrono::duration_cast<std::chrono::nanoseconds> (curr_time - prev_time);
+
+        prev_time = curr_time;
+
+        curr_ns += dur;
+        ns_tracker += dur;
+        if (curr_ns >= timestep) {
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_ns);
+            auto ms_tracker = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker);
+            curr_ns -= curr_ns;
+
+            //updates here
+            /*for (P6::P6Particle* par : particles)
+            {
+                par->Update((float)ms.count() / 1000);
+            }*/
+            physicsWorld.Update((float)ms.count() / 1000);
+
+            //check if red finished
+            if (particles[0]->Position.x >= 0 && particles[0]->Position.y <= 0
+                && !isRedFinished) {
+                //putting the final values
+                vecRacers[0].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
+                vecRacers[0].finalVelocity = particles[1]->Velocity;
+                vecRacers[0].averVelocity = (redInitVel + vecRacers[0].finalVelocity) / 2;
+                //Stopping the particle from moving
+                particles[0]->Velocity = { 0,0,0 };
+                particles[0]->Acceleration = { 0,0,0 };
+                isRedFinished = true;
+            }
+
+            if (particles[1]->Position.x <= 0 && particles[1]->Position.y <= 0 
+                && !isGreenFinished) {
+                //putting the final values
+                vecRacers[1].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
+                vecRacers[1].finalVelocity = particles[1]->Velocity;
+                vecRacers[1].averVelocity = (greenInitVel + vecRacers[1].finalVelocity) / 2;
+                //Stopping the particle from moving
+                particles[1]->Velocity = { 0,0,0 };
+                particles[1]->Acceleration = { 0,0,0 };
+                
+                isGreenFinished = true;
+            }
+            if (particles[2]->Position.x <= 0 && particles[2]->Position.y >= 0
+                && !isBlueFinished) {
+                //putting the final values
+                vecRacers[2].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
+                vecRacers[2].finalVelocity = particles[1]->Velocity;
+                vecRacers[2].averVelocity = (blueInitVel + vecRacers[2].finalVelocity) / 2;
+                //Stopping the particle from moving
+                particles[2]->Velocity = { 0,0,0 };
+                particles[2]->Acceleration = { 0,0,0 };
+                isBlueFinished = true;
+            }
+            if (particles[3]->Position.x >= 0 && particles[3]->Position.y >= 0
+                && !isYellowFinished) {
+                //putting the final values
+                vecRacers[3].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
+                vecRacers[3].finalVelocity = particles[1]->Velocity;
+                vecRacers[3].averVelocity = (yellowInitVel + vecRacers[3].finalVelocity) / 2;
+                //Stopping the particle from moving
+                particles[3]->Velocity = { 0,0,0 };
+                particles[3]->Acceleration = { 0,0,0 };
+                isYellowFinished = true;
+            }
+
+            if (isRedFinished && isYellowFinished &&
+                isBlueFinished && isGreenFinished) {
+
+                printRaceResults(getRacerRankings(vecRacers));
+
+
+                //buffer so it won't close immeditietly
+                std::cout << "Input any letter/number to close..." << std::endl;
+                std::cin >> buffer;
+                glfwSetWindowShouldClose(window, 1);
+            }
+        }
+        //std::cout << "normal upd" << std::endl;
+
+        processInput(window);
+        //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
 
         /* Render here */
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glm::mat4 viewMatrix;
-        viewMatrix = glm::lookAt(orca.getCameraPos(), orca.getCameraPos() + orca.getFront(), orca.getWorldUp());
 
-        //skybox
-        glDepthMask(GL_FALSE);
-        glDepthFunc(GL_LEQUAL);
-        glUseProgram(skyboxShaderProg);
+        for (int i = 0; i < particles.size(); i++)
+        {
+            glm::mat4 trans_mat = getTransMat((glm::vec3)particles[i]->Position);
+            particleShaders[i].use();
+            particleShaders[i].setInt("ourTexture", 0);
+            particleShaders[i].setInt("ourText", 1);
+            particleShaders[i].setMat4("transform", trans_mat);
+            particleShaders[i].setMat4("projection", projection);
+            particleShaders[i].setFloat("red", rgb_values[i].x);
+            particleShaders[i].setFloat("green", rgb_values[i].y);
+            particleShaders[i].setFloat("blue", rgb_values[i].z);
 
-        glm::mat4 sky_view = glm::mat4(1.f);
-        sky_view = glm::mat4(
-            //cast the same view matrix of the camera turn it into a mat3 to remove translations
-            glm::mat3(viewMatrix)
-            //then reconvert it to a mat4
-        );
-
-        unsigned int skyboxViewLoc = glGetUniformLocation(skyboxShaderProg, "view");
-        glUniformMatrix4fv(skyboxViewLoc, 1, GL_FALSE, glm::value_ptr(sky_view));
-
-        unsigned int skyboxProjLoc = glGetUniformLocation(skyboxShaderProg, "projection");
-        glUniformMatrix4fv(skyboxProjLoc,
-            1,
-            GL_FALSE,
-            glm::value_ptr(projection));
-
-        glBindVertexArray(skyboxVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
-        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
-        
-        /*      SPHERE OBJECT       */
-        
-        sphereShader.use();
-
-        //
-        float ball_scale = 0.5f;
-        light_ball.setScale({ ball_scale ,ball_scale ,ball_scale });
-
-        //set the camera to ortho
-        light_ball.setCamera(orca.getProjection(), orca.getCameraPos(), orca.getFront(), orca.getViewMat());
-        
-        colorLight.setColor(sphere_color); //change the color
-        colorLight.perform(&sphereShader); //attaches the values of light into the shader program of sphere
-        light_ball.sphereDraw(&sphereShader, &sphere_VAO, &ball_fullVertexData);
+            glBindVertexArray(VAO);
+            glDrawArrays(GL_TRIANGLES, i, fullVertexData.size() / 8);
+        }
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
 
         /* Poll for and process events */
         glfwPollEvents();
-        
-
     }
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-   /* glDeleteBuffers(1, &EBO);*/
+
+    for (auto particleShader : particleShaders) {
+        glDeleteProgram(particleShader.getID());
+    }
+    //glDeleteProgram(shaderProg);
     glfwTerminate();
     return 0;
 }

@@ -21,10 +21,10 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{2c008422-7c91-407d-a467-b6b50cf0c9b8}</ProjectGuid>
-    <RootNamespace>Module4</RootNamespace>
+    <ProjectGuid>{4223a734-345c-4a9b-9349-140550a8d35a}</ProjectGuid>
+    <RootNamespace>Module2</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>GDPHYS_scratch</ProjectName>
+    <ProjectName>Particle</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -140,62 +140,28 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Camera.cpp" />
-    <ClCompile Include="ColorLight.cpp" />
     <ClCompile Include="glad.c" />
-    <ClCompile Include="Light.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="Model3D.cpp" />
-    <ClCompile Include="OrthoCamera.cpp" />
-    <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="P6\ForceRegistry.cpp" />
+    <ClCompile Include="P6\GravityForceGenerator.cpp" />
+    <ClCompile Include="P6\PhysicsWorld.cpp" />
+    <ClCompile Include="P6\Vector.cpp" />
+    <ClCompile Include="P6\Particle.cpp" />
+    <ClCompile Include="Renderer\Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Camera.h" />
-    <ClInclude Include="ColorLight.hpp" />
-    <ClInclude Include="Light.h" />
-    <ClInclude Include="Model3D.h" />
-    <ClInclude Include="OrthoCamera.h" />
-    <ClInclude Include="P6\MyVector.hpp" />
-    <ClInclude Include="P6\Particle.hpp" />
-    <ClInclude Include="Shader.h" />
-    <ClInclude Include="stb_image.h" />
+    <ClInclude Include="P6\ForceGenerator.h" />
+    <ClInclude Include="P6\ForceRegistry.h" />
+    <ClInclude Include="P6\GravityForceGenerator.h" />
+    <ClInclude Include="P6\Particle.h" />
+    <ClInclude Include="P6\PhysicsWorld.h" />
+    <ClInclude Include="P6\Vector.h" />
+    <ClInclude Include="Renderer\Shader.h" />
     <ClInclude Include="tiny_obj_loader.h" />
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="Shaders\sample.frag">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)Shaders</DestinationFolders>
-    </CopyFileToFolders>
-    <CopyFileToFolders Include="Shaders\sample.vert">
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</DeploymentContent>
-      <FileType>Document</FileType>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</DeploymentContent>
-      <DeploymentContent Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</DeploymentContent>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)Shaders</DestinationFolders>
-      <DestinationFolders Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)Shaders</DestinationFolders>
-    </CopyFileToFolders>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Shaders\mainObj.frag" />
-    <None Include="Shaders\mainObj.vert" />
-    <None Include="Shaders\pointLight.frag" />
-    <None Include="Shaders\pointLight.vert" />
-    <None Include="Shaders\skybox.frag" />
-    <None Include="Shaders\skybox.vert" />
-    <None Include="Shaders\directionLight.frag" />
-    <None Include="Shaders\directionLight.vert" />
-    <None Include="Shaders\sphere.frag" />
-    <None Include="Shaders\sphere.vert" />
+    <Text Include="Shaders\fragShader.frag" />
+    <Text Include="Shaders\vertShader.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
