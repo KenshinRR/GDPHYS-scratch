@@ -43,6 +43,8 @@ constexpr std::chrono::nanoseconds timestep(30ms);
 #include "P6/Links/ParticleLink.h"
 #include "P6/Links/Rod.h"
 
+#include "Line/RenderLine.h"
+
 //Camera
 #include "Camera/Camera.h"
 #include "Camera/OrthoCamera.h"
@@ -325,6 +327,8 @@ int main(void)
         P6::MyVector(0.f, 0.f, 0.f)
     );
     particle2->radius = 10.f;
+    sc = particle2->radius;
+    particleScale = { sc,sc,sc };
     particle2->lifeSpan = 100.f;
     pWorld->AddParticle(particle2);
     P6::RenderParticle* newRP2 = new P6::RenderParticle(particle2, particleModel, color, &sphereShader, &VAO, &fullVertexData);
@@ -357,7 +361,12 @@ int main(void)
     P6::DragForceGenerator drag = P6::DragForceGenerator(0.14, 0.1);
     pWorld.forceRegistry.Add(&p1, &drag);*/
 
-
+    //Line initialiez
+    RenderLine renderLine(
+        particle1->Position,    
+        particle2->Position,
+        orthoCam.getProjection()
+    );
 
     //clock initialiaze
     using clock = std::chrono::high_resolution_clock;
@@ -398,6 +407,12 @@ int main(void)
             if (!isPaused) {
                 //fireworkHandler.Perform(RenderParticles, pWorld);
                 pWorld->Update((float)ms.count() / 1000);
+                renderLine.Update(
+                    particle2->Position,
+                    particle1->Position,
+                    orthoCam.getProjection()
+                );
+                //std::cout << "P2 pos: " << particle2->Position.x << std::endl;
                 //contact.Resolve((float)ms.count() / 1000);
             }
             else {
@@ -453,8 +468,9 @@ int main(void)
             (*i)->Draw();
         }
 
-
-
+        //Line render
+        renderLine.Draw();
+        
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
