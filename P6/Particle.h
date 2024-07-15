@@ -7,27 +7,47 @@ namespace P6 {
 
 	
 	class P6Particle {
+	
+		
+	
+	public://fireworks
+		float lifeSpan = 1.0f;
 	public:
-		float mass; //unit is kg
+		float mass;
 		MyVector Position;
 		MyVector Velocity;
 		MyVector Acceleration;
+		
+		//damping 
 		float damping = 0.9f;
+
+		float radius = 1.0f;
+		float restitution = 1.0f; //how bouncy the particle is
+
 	public:
 		P6Particle();
 		P6Particle(float m, MyVector pos, MyVector vel, MyVector accel);
 	protected:
-		MyVector accumulatedForce = MyVector(0.0f, 0.0f, 0.0f);
+		//forces
+		MyVector accumulatedForce = MyVector(0, 0, 0);
 
+
+		bool isDestroyed = false;
 		void UpdateVelocity(float time);
 		void UpdatePosition(float time);
 		
 	public:
-		void Update(float time);
 
-		void AddForce(MyVector force);
+		//forces
 		void ResetForce();
+		void AddForce(MyVector force);
 
+
+		void Update(float time);
 	public:
+		void Destroy();
+		bool IsDestroyed() {
+			return isDestroyed;
+		}
 	};
 }

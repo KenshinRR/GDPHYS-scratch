@@ -12,7 +12,7 @@
 
 #include <iostream>
 #include <string>
-#include <algorithm>
+#include <vector>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -24,27 +24,101 @@
 using namespace std::chrono_literals;
 constexpr std::chrono::nanoseconds timestep(30ms);
 
+#include "Renderer/Shader.h"
+#include "Renderer/Model3D.h"
+
 #include "P6/Vector.h"
 #include "P6/Particle.h"
 #include "P6/PhysicsWorld.h"
+#include "P6/RenderParticle.h"
+#include "P6/ForceRegistry.h"
+#include "P6/ForceGenerator.h"
+#include "P6/DragForceGenerator.h"
+#include "P6/ParticleContact.h"
+#include "P6/ContactResolver.h"
 
-#include "Renderer/Shader.h"
+#include "P6/Springs/AnchoredSpring.h"
+#include "P6/Springs/ParticleSpring.h"
 
-/*========GLOBAL VARIABLES=========*/
-//window dimensions
-float width = 700;
-float height = 700;
+#include "P6/Links/ParticleLink.h"
+#include "P6/Links/Rod.h"
 
-float xRot = 0.0f, yRot = 0.0f, zRot = 0.0f;
+//Camera
+#include "Camera/Camera.h"
+#include "Camera/OrthoCamera.h"
+#include "Camera/PerspectiveCamera.h"
 
-//structs
-struct Racer{
-    std::string name;
-    int position;
-    P6::MyVector finalVelocity;
-    P6::MyVector averVelocity;
-    float finishedTime;
-}racer_red, racer_green, racer_blue, racer_yellow;
+//activites
+#include "Activities/FireworkHandler.h"
+
+//helper functions / Utility functions
+#include "Utility/NumberRandomizer.h"
+
+float width = 800;
+float height = 800;
+
+
+//camera initialization
+OrthoCamera orthoCam({ 0,0,-400 }, { 0,1,0 }, { 0.1,0.1,1 }, height, width, width, true);
+PerspectiveCamera persCam({ 0,0,-400 }, { 0,1,0 }, { 0,0,1 }, 90.f, height, width, 800, false);//test view
+glm::vec3 moveCam({ 0, 0, 0 });
+
+float pitch = 0.0f;
+float yaw = -90.0f;
+int camState = 0;
+
+
+//Fireworks
+bool isPaused = false;
+
+std::vector <P6::P6Particle*> res;
+
+glm::vec3 camRotation(bool vertical, bool pos) {
+    const float speed = 0.1f;
+
+    //checks what button was pressed
+    if (vertical) {
+        if (pos) {
+            pitch += speed;//y w was pressed
+        }
+        else {
+            pitch -= speed;//y s was pressed
+        }
+
+    }
+    else {
+        if (pos) {
+            yaw += speed; //x d was pressed
+        }
+        else {
+            yaw -= speed; //x a was pressed
+        }
+
+    }
+
+
+
+    //making sure that you can't 360 via neck breaking
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
+
+    //setting camera pos, the number multiplied is the radius
+
+    glm::vec3 camPos;
+    camPos.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch)) * 400;
+    camPos.y = sin(glm::radians(pitch)) * 400;
+    camPos.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch)) * 400;
+    return  camPos;
+
+}
+
+
+
+
+
+
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
@@ -55,41 +129,77 @@ void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-    
-    //yrot
+
+
+    if (glfwGetKey(window, GLFW_KEY_1)) {
+        if (camState != 0) {
+            camState = 0;
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_2)) {
+        if (camState != 1) {
+            camState = 1;
+        }
+    }
+
+
     if (glfwGetKey(window, GLFW_KEY_A)) {
-        yRot -= 0.05;
+        moveCam = camRotation(false, false);
     }
     if (glfwGetKey(window, GLFW_KEY_D)) {
-        yRot += 0.05;
+        moveCam = camRotation(false, true);
     }
-
-    //xRot
     if (glfwGetKey(window, GLFW_KEY_S)) {
-        xRot -= 0.05;
+        moveCam = camRotation(true, false);
     }
     if (glfwGetKey(window, GLFW_KEY_W)) {
-        xRot += 0.05;
+        moveCam = camRotation(true, true);
     }
 
-    //zRot
-    if (glfwGetKey(window, GLFW_KEY_Q)) {
-        zRot -= 0.05;
-    }
-    if (glfwGetKey(window, GLFW_KEY_E)) {
-        zRot += 0.05;
-    }
 
-        
-    
-    
-        
+    //checks pausing
+    if (glfwGetKey(window, GLFW_KEY_SPACE)) {
+        if (isPaused) isPaused = false;
+        else isPaused = true;
+    }
 }
 
 
-std::vector<GLfloat> getFullVertexData(std::string pathName) {
+int main(void)
+{
 
-    std::string path = pathName;
+    GLFWwindow* window;
+
+    /* Initialize the library */
+    if (!glfwInit())
+        return -1;
+
+
+
+    /* Create a windowed mode window and its OpenGL context */
+    window = glfwCreateWindow(width, height, "JAROCO Engine", NULL, NULL);
+    if (!window)
+    {
+        glfwTerminate();
+        return -1;
+    }
+
+
+    ;    /* Make the window's context current */
+    glfwMakeContextCurrent(window);
+    gladLoadGL();
+
+
+    Shader sphereShader("Shaders/vertShader.vert", "Shaders/fragShader.frag");
+
+
+
+
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    //=================models================//
+
+    std::string path = "3D/sphere.obj";
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> material;
     std::string warning, error;
@@ -142,120 +252,24 @@ std::vector<GLfloat> getFullVertexData(std::string pathName) {
             attributes.texcoords[(vData.texcoord_index * 2) + 1]
         );
 
+
+
     }
-
-    return fullVertexData;
-}
-
-glm::mat4 getTransMat(glm::vec3 position) {
-
-    glm::mat4 iden_Mat = glm::mat4(1.0f);
-
-    glm::mat4 trans_Mat = glm::translate(iden_Mat, position);
-
-    //X-rotation
-    trans_Mat = glm::rotate(
-        trans_Mat,
-        glm::radians(xRot),
-        glm::normalize(glm::vec3(1.0f, 0.0f, 0.0f))
-
-    );//give quat
-
-    //Y-rotation
-    trans_Mat = glm::rotate(
-        trans_Mat,
-        glm::radians(yRot),
-        glm::normalize(glm::vec3(0.0f, 1.0f, 0.0f))
-    );
-
-    //Z-rotation
-    trans_Mat = glm::rotate(
-        trans_Mat,
-        glm::radians(zRot),
-        glm::normalize(glm::vec3(0.0f, 0.0f, 1.0f))
-    );
-
-    return trans_Mat;
-}
-
-float roundOff(float var)
-{
-    float value = (int)(var * 100 + .5);
-    return (float)value / 100;
-}
-
-void printRaceResults(std::vector<Racer> racers) {
-    for (int i = 0; i < (int)racers.size(); i++)
-    {
-        racers[i].position = i + 1;
-        std::cout << "Ranking: " << racers[i].position << std::endl;
-        std::cout << "Name: " << racers[i].name << std::endl;
-        std::cout << "Mag. Velocity: " << roundOff(racers[i].finalVelocity.Magnitude()) << " m/s" << std::endl;
-
-        std::cout << "Average Velocity: (" << roundOff(racers[i].averVelocity.x) << ", ";
-        std::cout << roundOff(racers[i].averVelocity.y) << ", " << roundOff(racers[i].averVelocity.z);
-        std::cout << ")m/s" << std::endl;
-
-        std::cout << roundOff(racers[i].finishedTime / 1000) << " seconds" << std::endl << std::endl;
-    }
-}
-
-bool compareByFloat(const Racer& a, const Racer& b) {
-    return a.finishedTime < b.finishedTime; // Sort in descending order
-}
-
-std::vector<Racer> getRacerRankings(const std::vector<Racer> racers) {
-    std::vector<Racer> sortedVector = racers;
-    std::sort(sortedVector.begin(), sortedVector.end(), compareByFloat);
-    return sortedVector;
-}
-
-
-
-int main(void)
-{
-    
-    GLFWwindow* window;
-
-    /* Initialize the library */
-    if (!glfwInit())
-        return -1;
-
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(width, height , "PC01 Reblando", NULL, NULL);
-    if (!window)
-    {
-        glfwTerminate();
-        return -1;
-    }
-
-;    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
-    gladLoadGL();
-
-    
-
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-    
-    //=================models================//
-
-    std::vector<GLfloat> fullVertexData = getFullVertexData("3D/sphere.obj");
 
     //=================VBO/VAO==========//
 
     unsigned int VBO, VAO;
-    
+
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-   
+
 
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * fullVertexData.size(), fullVertexData.data(), GL_DYNAMIC_DRAW);
 
-   
+
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
@@ -270,70 +284,80 @@ int main(void)
     glEnableVertexAttribArray(2);
 
 
-    
-    //Camera inits
-    //float screen_scale = 40.0f;
-    //glm::mat4 projection = glm::ortho(-screen_scale, screen_scale, -screen_scale, screen_scale, -screen_scale, screen_scale);
-    glm::mat4 projection = glm::ortho(-width/2, width/2, -height/2, height/2, -350.f, 350.f);
-    
 
-    //Initialize particles
 
-    std::vector<P6::P6Particle*> particles;
-    for (int i = 0; i < 4; i++)
-    {
-        particles.push_back(
-            new P6::P6Particle);
-    }
 
-    //Red particle
-    particles[0]->Position = {width/-2, height/2, 201.0f};
-    P6::MyVector direction = P6::MyVector(particles[0]->Position.Direction());
-    particles[0]->Velocity = P6::MyVector(direction.ScalarMult(-80.0f));
-    P6::MyVector redInitVel = particles[0]->Velocity;
-    particles[0]->Acceleration = P6::MyVector(direction.ScalarMult(-14.5f));
 
-    //Green particle
-    particles[1]->Position = { width / 2, height / 2, 173.0f };
-    direction = P6::MyVector(particles[1]->Position.Direction());
-    particles[1]->Velocity = P6::MyVector(direction.ScalarMult(-90.0f));
-    P6::MyVector greenInitVel = particles[1]->Velocity;
-    particles[1]->Acceleration = P6::MyVector(direction.ScalarMult(-8.0f));
+    //Render Particles
+    std::list<P6::RenderParticle*>* RenderParticles = new std::list<P6::RenderParticle*>;
 
-    //blue particle
-    particles[2]->Position = { width / 2, height / -2, -300.0f };
-    direction = P6::MyVector(particles[2]->Position.Direction());
-    particles[2]->Velocity = P6::MyVector(direction.ScalarMult(-130.0f));
-    P6::MyVector blueInitVel = particles[2]->Velocity;
-    particles[2]->Acceleration = P6::MyVector(direction.ScalarMult(-1.0f));
+    //P6 WORLD
+    P6::PhysicsWorld* pWorld = new P6::PhysicsWorld();
 
-    //yellow particle
-    particles[3]->Position = { width / -2, height / -2, -150.0f };
-    direction = P6::MyVector(particles[3]->Position.Direction());
-    particles[3]->Velocity = P6::MyVector(direction.ScalarMult(-110.0f));
-    P6::MyVector yellowInitVel = particles[3]->Velocity;
-    particles[3]->Acceleration = P6::MyVector(direction.ScalarMult(-3.0f));
+    //PARTICLES
+    //p1
+    P6::P6Particle* particle1 = new P6::P6Particle(
+        5.0f,
+        P6::MyVector(0, 0, 0),
+        P6::MyVector(0, 0, 0),
+        P6::MyVector(0.f, 0.f, 0.f)
+    );
 
-    std::vector<glm::vec3> rgb_values;
-    rgb_values.push_back(glm::vec3(1.0f, 0.0f, 0.0f)); //red
-    rgb_values.push_back(glm::vec3(0.0f, 1.0f, 0.0f)); //green
-    rgb_values.push_back(glm::vec3(0.0f, 0.0f, 1.0f)); //blue
-    rgb_values.push_back(glm::vec3(1.0f, 1.0f, 0.0f)); //yellow
-    
-    //physics world
-    P6::PhysicsWorld physicsWorld;
-    for (P6::P6Particle* particle : particles)
-    {
-        physicsWorld.AddParticle(particle);
-    }
+    particle1->radius = 10.0f;
+    float sc = particle1->radius;
+    P6::MyVector particleScale = { sc,sc,sc };
 
-    //Getting Shader
-    std::vector<Renderer::Shader> particleShaders;
-    for (int i = 0; i < particles.size(); i++)
-    {
-        Renderer::Shader particleShader("Shaders/vertShader.vert", "Shaders/fragShader.frag");
-        particleShaders.push_back(particleShader);
-    }
+    P6::MyVector color = P6::MyVector(0, 0, 1.f);
+    Model3D* particleModel = new Model3D({ 0,0,0 });
+    particleModel->setScale(particleScale.x, particleScale.y, particleScale.z);
+
+    particle1->lifeSpan = 100.f;
+    pWorld->AddParticle(particle1);
+    P6::RenderParticle* newRP = new P6::RenderParticle(particle1, particleModel, color, &sphereShader, &VAO, &fullVertexData);
+    RenderParticles->push_back(newRP);
+
+    //p2
+    color = P6::MyVector(1.f, 0, 0);
+    P6::P6Particle* particle2 = new P6::P6Particle(
+        5.0f,
+        P6::MyVector(-40, 0, 0),
+        P6::MyVector(0, 0, 0),
+        P6::MyVector(0.f, 0.f, 0.f)
+    );
+    particle2->radius = 10.f;
+    particle2->lifeSpan = 100.f;
+    pWorld->AddParticle(particle2);
+    P6::RenderParticle* newRP2 = new P6::RenderParticle(particle2, particleModel, color, &sphereShader, &VAO, &fullVertexData);
+    RenderParticles->push_back(newRP2);
+
+    //adding force
+    particle1->AddForce({-1000.0f,0,0});
+
+    //SPRING
+    P6::AnchoredSpring aSpring = P6::AnchoredSpring(P6::MyVector(0, 0,0), 5, 0.5f);
+    //pWorld->forceRegistry.Add(particle2, &aSpring);
+
+    P6::ParticleSpring pSpring = P6::ParticleSpring(particle1, 5, 1);
+    //pWorld->forceRegistry.Add(particle2, &pSpring);
+
+    //ROD
+    P6::Rod* r = new P6::Rod();
+    r->particles[0] = particle1;
+    r->particles[1] = particle2;
+    r->length = 200;
+    //pWorld->Links.push_back(r);
+
+    ////FIREWORK PARTICLES
+    //Activities::FireworkHandler fireworkHandler(height, width);
+    //fireworkHandler.AssignShader(&sphereShader, &VAO, &fullVertexData);
+
+
+    //drag
+    /*
+    P6::DragForceGenerator drag = P6::DragForceGenerator(0.14, 0.1);
+    pWorld.forceRegistry.Add(&p1, &drag);*/
+
+
 
     //clock initialiaze
     using clock = std::chrono::high_resolution_clock;
@@ -342,27 +366,13 @@ int main(void)
     std::chrono::nanoseconds curr_ns(0);
     std::chrono::nanoseconds ns_tracker(0);
     int buffer;
-   
-    /*==============RACING VALUES=============*/
-    bool isRedFinished = false;
-    bool isBlueFinished = false;
-    bool isGreenFinished = false;
-    bool isYellowFinished = false;
 
-    std::vector<Racer> vecRacers;
-    vecRacers.push_back(racer_red);
-    vecRacers.push_back(racer_green);
-    vecRacers.push_back(racer_blue);
-    vecRacers.push_back(racer_yellow);
+    srand((unsigned)time(0));
 
-    vecRacers[0].name = "Red";
-    vecRacers[1].name = "Green";
-    vecRacers[2].name = "Blue";
-    vecRacers[3].name = "Yellow";
 
-    //adding force
-    particles[0]->AddForce(P6::MyVector(1000.0f, -1000.0f, 0.0f));
 
+    //1 m = 1 unit
+    //1m = 1 px
     /* Loop until the user closes the window */
     while (!glfwWindowShouldClose(window))
     {
@@ -376,75 +386,26 @@ int main(void)
         ns_tracker += dur;
         if (curr_ns >= timestep) {
             auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(curr_ns);
-            auto ms_tracker = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker);
+            auto ms_tracker = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
+
             curr_ns -= curr_ns;
 
+
+            //fireworks
+
+
             //updates here
-            /*for (P6::P6Particle* par : particles)
-            {
-                par->Update((float)ms.count() / 1000);
-            }*/
-            physicsWorld.Update((float)ms.count() / 1000);
-
-            //check if red finished
-            if (particles[0]->Position.x >= 0 && particles[0]->Position.y <= 0
-                && !isRedFinished) {
-                //putting the final values
-                vecRacers[0].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
-                vecRacers[0].finalVelocity = particles[1]->Velocity;
-                vecRacers[0].averVelocity = (redInitVel + vecRacers[0].finalVelocity) / 2;
-                //Stopping the particle from moving
-                particles[0]->Velocity = { 0,0,0 };
-                particles[0]->Acceleration = { 0,0,0 };
-                isRedFinished = true;
+            if (!isPaused) {
+                //fireworkHandler.Perform(RenderParticles, pWorld);
+                pWorld->Update((float)ms.count() / 1000);
+                //contact.Resolve((float)ms.count() / 1000);
+            }
+            else {
+                std::cout << "Current particle count: " << RenderParticles->size() << std::endl;
             }
 
-            if (particles[1]->Position.x <= 0 && particles[1]->Position.y <= 0 
-                && !isGreenFinished) {
-                //putting the final values
-                vecRacers[1].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
-                vecRacers[1].finalVelocity = particles[1]->Velocity;
-                vecRacers[1].averVelocity = (greenInitVel + vecRacers[1].finalVelocity) / 2;
-                //Stopping the particle from moving
-                particles[1]->Velocity = { 0,0,0 };
-                particles[1]->Acceleration = { 0,0,0 };
-                
-                isGreenFinished = true;
-            }
-            if (particles[2]->Position.x <= 0 && particles[2]->Position.y >= 0
-                && !isBlueFinished) {
-                //putting the final values
-                vecRacers[2].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
-                vecRacers[2].finalVelocity = particles[1]->Velocity;
-                vecRacers[2].averVelocity = (blueInitVel + vecRacers[2].finalVelocity) / 2;
-                //Stopping the particle from moving
-                particles[2]->Velocity = { 0,0,0 };
-                particles[2]->Acceleration = { 0,0,0 };
-                isBlueFinished = true;
-            }
-            if (particles[3]->Position.x >= 0 && particles[3]->Position.y >= 0
-                && !isYellowFinished) {
-                //putting the final values
-                vecRacers[3].finishedTime = std::chrono::duration_cast<std::chrono::milliseconds>(ns_tracker).count();
-                vecRacers[3].finalVelocity = particles[1]->Velocity;
-                vecRacers[3].averVelocity = (yellowInitVel + vecRacers[3].finalVelocity) / 2;
-                //Stopping the particle from moving
-                particles[3]->Velocity = { 0,0,0 };
-                particles[3]->Acceleration = { 0,0,0 };
-                isYellowFinished = true;
-            }
-
-            if (isRedFinished && isYellowFinished &&
-                isBlueFinished && isGreenFinished) {
-
-                printRaceResults(getRacerRankings(vecRacers));
 
 
-                //buffer so it won't close immeditietly
-                std::cout << "Input any letter/number to close..." << std::endl;
-                std::cin >> buffer;
-                glfwSetWindowShouldClose(window, 1);
-            }
         }
         //std::cout << "normal upd" << std::endl;
 
@@ -454,35 +415,64 @@ int main(void)
 
         /* Render here */
 
-        for (int i = 0; i < particles.size(); i++)
-        {
-            glm::mat4 trans_mat = getTransMat((glm::vec3)particles[i]->Position);
-            particleShaders[i].use();
-            particleShaders[i].setInt("ourTexture", 0);
-            particleShaders[i].setInt("ourText", 1);
-            particleShaders[i].setMat4("transform", trans_mat);
-            particleShaders[i].setMat4("projection", projection);
-            particleShaders[i].setFloat("red", rgb_values[i].x);
-            particleShaders[i].setFloat("green", rgb_values[i].y);
-            particleShaders[i].setFloat("blue", rgb_values[i].z);
 
-            glBindVertexArray(VAO);
-            glDrawArrays(GL_TRIANGLES, i, fullVertexData.size() / 8);
+        //cameras
+        P6::MyVector converter{ 0,0,0 };
+
+        switch (camState) {
+        case 0:
+            if (moveCam != glm::vec3{ 0, 0, 0 }) {//this is for on camCreation making sure it doesnt set it to 0,0,0 on start
+                orthoCam.setCameraPos(moveCam);//set camera pos
+            }
+
+
+            converter = P6::MyVector{ orthoCam.getCameraPos().x,orthoCam.getCameraPos().y ,orthoCam.getCameraPos().z };//this makes a myVector for...
+            orthoCam.setFront(glm::vec3{ -converter.Direction().x,-converter.Direction().y,-converter.Direction().z });
+            //THIS cause im insane, takes the the position, turns that to NDC and THEN we point AWAY so that it points hopefully to center.
+            orthoCam.setViewMatrix();
+
+            orthoCam.perfromSpecifics(&sphereShader);//put the data into shader
+
+
+            break;
+        case 1:
+            if (moveCam != glm::vec3{ 0, 0, 0 }) {//this is for on camCreation making sure it doesnt set it to 0,0,0 on start
+                persCam.setCameraPos(moveCam);//set camera pos
+            }
+
+            converter = P6::MyVector{ persCam.getCameraPos().x,persCam.getCameraPos().y ,persCam.getCameraPos().z };//this makes a myVector for...
+            persCam.setFront(glm::vec3{ -converter.Direction().x,-converter.Direction().y,-converter.Direction().z });
+            //THIS cause im insane, takes the the position, turns that to NDC and THEN we point AWAY so that it points hopefully to center.
+            persCam.setViewMatrix();
+
+            persCam.perfromSpecifics(&sphereShader);//put the data into shader
+            break;
         }
+
+        for (std::list<P6::RenderParticle*>::iterator i = RenderParticles->begin(); i != RenderParticles->end(); i++) {
+            (*i)->Draw();
+        }
+
+
+
 
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
 
         /* Poll for and process events */
         glfwPollEvents();
+
     }
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
 
-    for (auto particleShader : particleShaders) {
-        glDeleteProgram(particleShader.getID());
-    }
-    //glDeleteProgram(shaderProg);
+
+
+
+
+
+
+
     glfwTerminate();
     return 0;
 }

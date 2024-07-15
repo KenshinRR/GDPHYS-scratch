@@ -1,15 +1,17 @@
 #pragma once
+
 #include "ForceGenerator.h"
-#include "Vector.h"
-#include "Particle.h"
 
 namespace P6 {
-	class GravityForceGenerator : public ForceGenerator{
+	class GravityForceGenerator : public ForceGenerator
+	{
 	private:
-		MyVector Gravity = MyVector(0.0f, -9.8f, 0.0f);
+		MyVector Gravity = MyVector(0, -9.8, 0);
 	public:
-		GravityForceGenerator(const MyVector gravity) : Gravity(gravity) {};
-
-		void UpdateForce(P6Particle* p, float time) override;
+		GravityForceGenerator(const MyVector gravity) : Gravity(gravity){}
+		
+		void UpdateForce(P6Particle* particle, float time) override;
 	};
 }
+
+

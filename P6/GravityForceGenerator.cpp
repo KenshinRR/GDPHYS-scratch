@@ -1,9 +1,11 @@
 #include "GravityForceGenerator.h"
 
-void P6::GravityForceGenerator::UpdateForce(P6Particle* p, float time)
-{
-	if (p->mass <= 0) return;
+using namespace P6;
 
-	MyVector force = this->Gravity * p->mass;
-	p->AddForce(force);
+void GravityForceGenerator::UpdateForce(P6Particle* particle, float time) {
+	if (particle->mass <= 0) return;
+
+	MyVector force = Gravity * particle->mass;
+	particle->AddForce(force);
+
 }

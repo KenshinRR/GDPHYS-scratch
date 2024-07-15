@@ -140,22 +140,51 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="P6\Links\ParticleLink.cpp" />
+    <ClCompile Include="P6\Links\Rod.cpp" />
+    <ClCompile Include="P6\Springs\AnchoredSpring.cpp" />
+    <ClCompile Include="Camera\Camera.cpp" />
+    <ClCompile Include="Camera\OrthoCamera.cpp" />
+    <ClCompile Include="Camera\PerspectiveCamera.cpp" />
+    <ClCompile Include="Activities\FireworkHandler.cpp" />
+    <ClCompile Include="P6\Springs\ParticleSpring.cpp" />
+    <ClCompile Include="Utility\NumberRandomizer.cpp" />
+    <ClCompile Include="P6\ContactResolver.cpp" />
     <ClCompile Include="glad.c" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="P6\DragForceGenerator.cpp" />
+    <ClCompile Include="P6\ForceGenerator.cpp" />
     <ClCompile Include="P6\ForceRegistry.cpp" />
     <ClCompile Include="P6\GravityForceGenerator.cpp" />
     <ClCompile Include="P6\PhysicsWorld.cpp" />
+    <ClCompile Include="P6\RenderParticle.cpp" />
     <ClCompile Include="P6\Vector.cpp" />
     <ClCompile Include="P6\Particle.cpp" />
+    <ClCompile Include="P6\ParticleContact.cpp" />
+    <ClCompile Include="Renderer\Model3D.cpp" />
     <ClCompile Include="Renderer\Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="P6\Links\ParticleLink.h" />
+    <ClInclude Include="P6\Links\Rod.h" />
+    <ClInclude Include="P6\Springs\AnchoredSpring.h" />
+    <ClInclude Include="Camera\Camera.h" />
+    <ClInclude Include="Camera\OrthoCamera.h" />
+    <ClInclude Include="Camera\PerspectiveCamera.h" />
+    <ClInclude Include="Activities\FireworkHandler.h" />
+    <ClInclude Include="P6\Springs\ParticleSpring.h" />
+    <ClInclude Include="Utility\NumberRandomizer.h" />
+    <ClInclude Include="P6\ContactResolver.h" />
+    <ClInclude Include="P6\DragForceGenerator.h" />
     <ClInclude Include="P6\ForceGenerator.h" />
     <ClInclude Include="P6\ForceRegistry.h" />
     <ClInclude Include="P6\GravityForceGenerator.h" />
     <ClInclude Include="P6\Particle.h" />
     <ClInclude Include="P6\PhysicsWorld.h" />
+    <ClInclude Include="P6\RenderParticle.h" />
     <ClInclude Include="P6\Vector.h" />
+    <ClInclude Include="P6\ParticleContact.h" />
+    <ClInclude Include="Renderer\Model3D.h" />
     <ClInclude Include="Renderer\Shader.h" />
     <ClInclude Include="tiny_obj_loader.h" />
   </ItemGroup>
