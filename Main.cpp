@@ -53,6 +53,9 @@ constexpr std::chrono::nanoseconds timestep(30ms);
 //activites
 #include "Activities/FireworkHandler.h"
 
+#include "P6/Links/Bungee.h"
+#include "P6/Links/Chain.h"
+
 //helper functions / Utility functions
 #include "Utility/NumberRandomizer.h"
 
@@ -61,8 +64,8 @@ float height = 800;
 
 
 //camera initialization
-OrthoCamera orthoCam({ 0,0,-400 }, { 0,1,0 }, { 0.1,0.1,1 }, height, width, width, true);
-PerspectiveCamera persCam({ 0,0,-400 }, { 0,1,0 }, { 0,0,1 }, 90.f, height, width, 800, false);//test view
+OrthoCamera orthoCam({ 0,0, 400 }, { 0,1,0 }, { 0.1,0.1,1 }, height, width, width, true);
+PerspectiveCamera persCam({ 0,0,400 }, { 0,1,0 }, { 0,0,1 }, 90.f, height, width, 800, false);//test view
 glm::vec3 moveCam({ 0, 0, 0 });
 
 float pitch = 0.0f;
@@ -112,7 +115,7 @@ glm::vec3 camRotation(bool vertical, bool pos) {
     camPos.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch)) * 400;
     camPos.y = sin(glm::radians(pitch)) * 400;
     camPos.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch)) * 400;
-    return  camPos;
+    return  -camPos;
 
 }
 
@@ -300,12 +303,12 @@ int main(void)
     //p1
     P6::P6Particle* particle1 = new P6::P6Particle(
         5.0f,
-        P6::MyVector(0, 0, 0),
+        P6::MyVector(-70, 60, 0),
         P6::MyVector(0, 0, 0),
         P6::MyVector(0.f, 0.f, 0.f)
     );
 
-    particle1->radius = 10.0f;
+    particle1->radius = 20.0f;
     float sc = particle1->radius;
     P6::MyVector particleScale = { sc,sc,sc };
 
@@ -322,11 +325,11 @@ int main(void)
     color = P6::MyVector(1.f, 0, 0);
     P6::P6Particle* particle2 = new P6::P6Particle(
         5.0f,
-        P6::MyVector(-40, 0, 0),
+        P6::MyVector(70, 60, 0),
         P6::MyVector(0, 0, 0),
         P6::MyVector(0.f, 0.f, 0.f)
     );
-    particle2->radius = 10.f;
+    particle2->radius = 20.f;
     sc = particle2->radius;
     particleScale = { sc,sc,sc };
     particle2->lifeSpan = 100.f;
@@ -335,26 +338,20 @@ int main(void)
     RenderParticles->push_back(newRP2);
 
     //adding force
-    particle1->AddForce({-1000.0f,0,0});
+    //particle1->AddForce({-1000.0f,0,0});
 
     //SPRING
-    P6::AnchoredSpring aSpring = P6::AnchoredSpring(P6::MyVector(0, 0,0), 5, 0.5f);
+    P6::AnchoredSpring aSpring = P6::AnchoredSpring(P6::MyVector(70, 0,0), 0.5f, 10.0f);
     //pWorld->forceRegistry.Add(particle2, &aSpring);
 
     P6::ParticleSpring pSpring = P6::ParticleSpring(particle1, 5, 1);
     //pWorld->forceRegistry.Add(particle2, &pSpring);
 
-    //ROD
-    P6::Rod* r = new P6::Rod();
-    r->particles[0] = particle1;
-    r->particles[1] = particle2;
-    r->length = 200;
-    //pWorld->Links.push_back(r);
+    P6::Bungee bungeeLink = P6::Bungee(P6::MyVector(-70, 0, 0), 100.f);
+    pWorld->forceRegistry.Add(particle1, &bungeeLink);
 
-    ////FIREWORK PARTICLES
-    //Activities::FireworkHandler fireworkHandler(height, width);
-    //fireworkHandler.AssignShader(&sphereShader, &VAO, &fullVertexData);
-
+    P6::Chain chainLink = P6::Chain(P6::MyVector(70, 0, 0), 100.f);
+    pWorld->forceRegistry.Add(particle2, &chainLink);
 
     //drag
     /*
@@ -363,8 +360,10 @@ int main(void)
 
     //Line initialiez
     RenderLine renderLine(
-        particle1->Position,    
-        particle2->Position,
+        orthoCam.getProjection()
+    );
+
+    RenderLine renderLine2(
         orthoCam.getProjection()
     );
 
@@ -407,8 +406,14 @@ int main(void)
             if (!isPaused) {
                 //fireworkHandler.Perform(RenderParticles, pWorld);
                 pWorld->Update((float)ms.count() / 1000);
+                //std::cout << "Particle at " << particle2->Position.x << " , " << particle2->Position.y << std::endl;
                 renderLine.Update(
+                    MyVector(70,0,0),
                     particle2->Position,
+                    orthoCam.getProjection()
+                );
+                renderLine2.Update(
+                    MyVector(-70,0,0),
                     particle1->Position,
                     orthoCam.getProjection()
                 );
@@ -470,6 +475,7 @@ int main(void)
 
         //Line render
         renderLine.Draw();
+        renderLine2.Draw();
         
 
         /* Swap front and back buffers */

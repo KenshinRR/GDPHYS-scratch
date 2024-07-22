@@ -33,7 +33,7 @@ namespace P6 {
 		//checking what particles need to be removed
 		void UpdateParticleList();
 
-		GravityForceGenerator Gravity = GravityForceGenerator(MyVector(0, 0, 0));
+		GravityForceGenerator Gravity = GravityForceGenerator(MyVector(0, -9.8f, 0));
 
 	protected:
 		void GetOverLaps();

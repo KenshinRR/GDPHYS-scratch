@@ -2,8 +2,8 @@
 
 void RenderLine::Update(MyVector p1, MyVector p2, glm::mat4 projectionMatrix)
 {
-	this->P1 = p1 * (-1);
-	this->P2 = p2 * (-1);
+	this->P1 = p1;
+	this->P2 = p2;
 	this->projectionMatrix = projectionMatrix;
 }
 

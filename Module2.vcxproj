@@ -141,6 +141,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Line\RenderLine.cpp" />
+    <ClCompile Include="P6\Links\Bungee.cpp" />
+    <ClCompile Include="P6\Links\Chain.cpp" />
     <ClCompile Include="P6\Links\ParticleLink.cpp" />
     <ClCompile Include="P6\Links\Rod.cpp" />
     <ClCompile Include="P6\Springs\AnchoredSpring.cpp" />
@@ -167,6 +169,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Line\RenderLine.h" />
+    <ClInclude Include="P6\Links\Bungee.h" />
+    <ClInclude Include="P6\Links\Chain.h" />
     <ClInclude Include="P6\Links\ParticleLink.h" />
     <ClInclude Include="P6\Links\Rod.h" />
     <ClInclude Include="P6\Springs\AnchoredSpring.h" />
